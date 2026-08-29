@@ -13,8 +13,9 @@ Funcionalidades ativas:
 - ✅ Busca de posts por palavra-chave (título/conteúdo)
 - ✅ Visualização detalhada de post (conteúdo expandido)
 - ✅ Criação de novos posts por perfil de professor
+- ✅ Edição de posts existentes (atualiza apenas `data_atualizacao`)
 - ✅ Estados completos (loading, erro, vazio, 404, validação, 401/403)
-- ✅ Navegação SPA entre listagem, detalhe e criação de posts
+- ✅ Navegação SPA entre listagem, detalhe, criação e edição de posts
 
 ---
 
@@ -53,8 +54,10 @@ techfront/
 │   │   │   └── PostList.tsx
 │   │   ├── PostDetail/                # Visualização detalhada de um post
 │   │   │   └── PostDetail.tsx
-│   │   └── PostCreate/                # Formulário de criação de novo post
-│   │       └── PostCreate.tsx
+│   │   ├── PostCreate/                # Formulário de criação de novo post
+│   │   │   └── PostCreate.tsx
+│   │   └── PostEdit/                  # Formulário de edição de post existente
+│   │       └── PostEdit.tsx
 │   │
 │   ├── reducers/                      # Funções puras (useReducer pattern)
 │   │   └── postReducer.ts             # Redutor para operações CRUD de posts
@@ -84,10 +87,10 @@ techfront/
 | **API** | [api.ts](src/api.ts) | Duas instâncias Axios: `apiAluno` (leitura, token aluno) e `apiProfessor` (escrita, token professor), com `baseURL` via proxy e timeout |
 | **Estado** | [postReducer.ts](src/reducers/postReducer.ts) | Lógica pura de transformação de estado: `SET_POSTS`, `ADD_POST`, `UPDATE_POST`, `REMOVE_POST` |
 | **Tema** | [theme.ts](src/styles/theme.ts) | Design System completo (cores, tipografia, espaçamentos, breakpoints) + `GlobalStyles` |
-| **Estrutural** | `components/Header`, `components/MainContent`, `components/Footer` | Layout base da aplicação (esqueleto visual). Header possui também inclui o botão "Novo Post" |
-| **Feature** | `pages/PostList`, `pages/PostDetail`, `pages/PostCreate` | Lógica de negócio: listagem (fetch, busca, paginação), detalhe (fetch por id, navegação de volta) e criação (formulário controlado, validações cliente, datas automáticas, submit autenticado) |
+| **Estrutural** | `components/Header`, `components/MainContent`, `components/Footer` | Layout base da aplicação (esqueleto visual). Header inclui o botão "Novo Post"; PostDetail inclui o botão "Editar" |
+| **Feature** | `pages/PostList`, `pages/PostDetail`, `pages/PostCreate`, `pages/PostEdit` | Lógica de negócio: listagem (fetch, busca, paginação), detalhe (fetch por id + botão editar), criação (formulário, validações, datas automáticas) e edição (pré-carregamento por id, atualiza apenas data_atualizacao, submit com PUT) |
 | **UI** | `components/PostCard`, `components/Button`, `Loading`, `ErrorState`, `EmptyState` | Componentes de apresentação reutilizáveis (Button: primary/secondary/sm/md/lg/loading/fullWidth) |
-| **Raiz** | [App.tsx](src/App.tsx) | Orquestrador: une layout estrutural + rotas do React Router (3 rotas: `/`, `/posts/create`, `/posts/:id` com ordem correta) |
+| **Raiz** | [App.tsx](src/App.tsx) | Orquestrador: une layout estrutural + rotas do React Router (4 rotas com ordem correta de precedência) |
 
 ### Fluxo de Dados (Data Flow)
 
@@ -129,12 +132,36 @@ main.tsx
         │           │           │     └── Conteúdo: textarea 280px + contador + borda erro + helper
         │           │           └── Actions: [Cancelar (secondary)] + [Gravar Post (primary LG, loading)]
         │           │
+        │           ├── "/posts/:id/edit" → PostEdit (page)  ← rota ANTES de /posts/:id
+        │           │     ├── useParams<{ id }> (extrai :id da URL)
+        │           │     ├── loadingFetch + loadingSubmit separados
+        │           │     ├── useCallback + useEffect → apiProfessor.get(`/posts/${id}`)
+        │           │     │     └── SUCESSO: popula titulo + conteudo nos campos (valores originais)
+        │           │     ├── validateForm(): idêntico ao de criação
+        │           │     ├── handleSubmit:
+        │           │     │     ├── data_atualizacao ← new Date().toISOString()  ← SÓ ESSA DATA É ALTERADA
+        │           │     │     ├── data_publicacao NÃO é enviada (mantida preservada no backend)
+        │           │     │     ├── payload: { titulo, conteudo, data_atualizacao }
+        │           │     │     ├── apiProfessor.put(`/posts/${id}`, payload)  ← token PROFESSOR
+        │           │     │     └── SUCESSO → navigate(`/posts/${id}`, state: { justUpdated })
+        │           │     └── renderiza:
+        │           │           ├── BackButton (voltar para /posts/:id)
+        │           │           ├── Loading fetch inicial ("Carregando dados do post...")
+        │           │           ├── Loading submit ("Salvando...")
+        │           │           ├── InfoBanner: ID + Dt.Publicação + Última Atualização + explicação
+        │           │           ├── ErrorBanner (401/403/400/404/5xx com mensagens contextuais)
+        │           │           ├── 404: tela dedicada "Post não encontrado para edição"
+        │           │           ├── FormCard: mesmos inputs de criação (valores preenchidos)
+        │           │           └── Actions: [Cancelar (secondary)] + [Salvar Alterações (primary LG, loading)]
+        │           │
         │           └── "/posts/:id" → PostDetail (page)
         │                 ├── useParams<{ id }> (extrai :id da URL)
         │                 ├── useNavigate (voltar para listagem)
         │                 ├── useState: post, loading, error, notFound
         │                 ├── useCallback + useEffect → apiAluno.get(`/posts/${id}`)
         │                 ├── axios → proxy vite → backend localhost:3000
+        │                 ├── Botão "✏️ Editar" no PostHeader (canto superior direito do post)
+        │                 │     └── Link para `/posts/${id}/edit`
         │                 └── renderiza:
         │                       ├── BackButton (botão voltar)
         │                       ├── Loading (spinner)
@@ -163,17 +190,20 @@ main.tsx
 ## ✅ Padrões e Boas Práticas Adotados
 
 ### Integração com Back-End
-- ✅ **CRUD iniciado** (implementado: GET listagem, busca, detalhe por id e **POST /posts** criação)
+- ✅ **CRUD iniciado** (implementado: GET listagem, busca, detalhe por id, **POST /posts** criação e **PUT /posts/:id** edição)
 - ✅ **Dois perfis de autenticação separados**: `apiAluno` (leitura) e `apiProfessor` (escrita, permissão POST/PUT/DELETE na API)
-- ✅ **Datas automáticas no envio** (transparente para o usuário): `data_publicacao` e `data_atualizacao` são sempre geradas como `new Date().toISOString()` no momento do submit (não há campo para o usuário digitar data)
+- ✅ **Datas automáticas no envio** (transparente para o usuário):
+  - **Criação (POST)**: `data_publicacao` e `data_atualizacao` são ambas geradas como `new Date().toISOString()` no momento do submit
+  - **Edição (PUT)**: **APENAS `data_atualizacao`** é enviada no payload (gerada automaticamente no submit); o campo `data_publicacao` **NÃO é enviado** (preservado 100% no backend)
 - ✅ **Estados visuais completos**: loading, sucesso, erro (com retry), empty, **404**, **validação cliente side**, **401 (auth)** e **403 (perfil sem permissão)** com mensagens contextuais
 - ✅ **Paginação** no servidor (10 itens por página)
 - ✅ **Busca com debounce** (400ms) via endpoint `/posts/search`
-- ✅ **Detalhe por ID** via endpoint `/posts/:id` com tratamento de 404
+- ✅ **Detalhe por ID** via endpoint `/posts/:id` com tratamento de 404 e botão "✏️ Editar" no cabeçalho
 - ✅ **Criação via POST /posts** usando token de professor, payload com `titulo`, `conteudo` + datas automáticas, e redirect para `/posts/:id` do post recém-criado no sucesso
+- ✅ **Edição via PUT /posts/:id** usando token de professor, pré-carregamento do post, payload com `titulo`, `conteudo` + apenas `data_atualizacao`, e redirect para detalhe no sucesso
 - ✅ **Axios configurado** com proxy Vite (evita CORS em desenvolvimento)
 - ✅ **Autenticação Bearer token** (perfil aluno para leitura, perfil professor para escrita)
-- ✅ **Navegação SPA** via React Router DOM (listagem ↔ detalhe ↔ criação, sem recarregar página)
+- ✅ **Navegação SPA** via React Router DOM (listagem ↔ detalhe ↔ criação ↔ edição, sem recarregar página)
 - ✅ **Preview truncado no card** (4 linhas) com indicativo "Ler mais →"
 - ✅ **Botão reutilizável**: `components/Button` com variantes `primary/secondary`, tamanhos `sm/md/lg`, estado `loading` com spinner inline e suporte a `fullWidth`
 
@@ -287,17 +317,18 @@ Isso evita problemas de **CORS** durante o desenvolvimento.
 
 ### Navegação
 
-A aplicação atualmente possui **3 rotas ativas**:
+A aplicação atualmente possui **4 rotas ativas**:
 
 | Rota | Caminho | Componente | Descrição |
 |---|---|---|---|
 | **Home / Posts** | `/` | [PostList](src/pages/PostList/PostList.tsx) | Listagem paginada de todos os posts com busca e preview truncado |
 | **Criar Post** | `/posts/create` | [PostCreate](src/pages/PostCreate/PostCreate.tsx) | Formulário de criação de novo post (acessível pelo botão "Novo Post" no cabeçalho) |
-| **Detalhe do Post** | `/posts/:id` | [PostDetail](src/pages/PostDetail/PostDetail.tsx) | Visualização expandida do conteúdo completo com navegação de volta |
+| **Editar Post** | `/posts/:id/edit` | [PostEdit](src/pages/PostEdit/PostEdit.tsx) | Formulário de edição de post existente com dados pré-carregados (acessível pelo botão "✏️ Editar" na página de detalhe) |
+| **Detalhe do Post** | `/posts/:id` | [PostDetail](src/pages/PostDetail/PostDetail.tsx) | Visualização expandida do conteúdo completo com navegação de volta e botão de editar |
 
-> ⚠️ **Ordem das rotas no roteador**: Em [App.tsx](src/App.tsx) a rota `/posts/create` é **sempre declarada antes** de `/posts/:id`, para evitar que a palavra literal `create` seja interpretada como um ID dinâmico.
+> ⚠️ **Ordem das rotas no roteador**: Em [App.tsx](src/App.tsx) as rotas literais `/posts/create` e `/posts/:id/edit` são **sempre declaradas antes** da rota curinga `/posts/:id`, para evitar que as palavras literais `create` e `edit` sejam interpretadas como IDs dinâmicos. A ordem correta é: 1. `/` → 2. `/posts/create` → 3. `/posts/:id/edit` → 4. `/posts/:id`.
 
-A navegação ocorre pelo cabeçalho fixo ([Header](src/components/Header/Header.tsx)) com link ativo destacado, botão **"+ Novo Post"** (acessa a tela de criação), e também clicando nos cards da listagem.
+A navegação ocorre pelo cabeçalho fixo ([Header](src/components/Header/Header.tsx)) com link ativo destacado, botão **"+ Novo Post"** (acessa a tela de criação), clicando nos cards da listagem (abre detalhe), e também pelo botão **"✏️ Editar"** no cabeçalho do post detalhado (abre tela de edição).
 
 ### Funcionalidade Principal: Listagem de Posts
 
@@ -306,7 +337,8 @@ A navegação ocorre pelo cabeçalho fixo ([Header](src/components/Header/Header
 3. **Paginação**: Use os botões no rodapé da lista para navegar entre as páginas (mostra 1ª, última e vizinhas com `...`)
 4. **Abrir detalhe**: Clique em qualquer card da lista para navegar até `/posts/:id` e visualizar o conteúdo completo
 5. **Criar novo post**: Clique no botão **"+" / "Novo Post"** no canto superior direito do cabeçalho para abrir `/posts/create`
-6. **Estados visuais**:
+6. **Editar post existente**: Ao visualizar o detalhe do post, use o botão **"✏️ Editar"** no canto superior direito do cabeçalho do próprio post
+7. **Estados visuais**:
    - 🌀 **Carregando**: Spinner animado
    - ⚠️ **Erro**: Mensagem explicativa + botão "Tentar novamente"
    - 📝 **Vazio**: Ícone + mensagem amigável
@@ -327,9 +359,15 @@ A página de detalhe exibe o conteúdo completo de um post selecionado a partir 
 | Estado | Condição | Apresentação |
 |---|---|---|
 | 🌀 **Carregando** | Requisição em andamento | Spinner + mensagem + botão voltar disponível |
-| ✅ **Sucesso (200 OK)** | Post encontrado | Título grande (5xl → 3xl responsivo) + data de publicação + badge de atualizado (quando houver) + conteúdo completo (font-size lg, line-height 1.8) + dois CTAs de voltar |
+| ✅ **Sucesso (200 OK)** | Post encontrado | Título grande (5xl → 3xl responsivo) + **botão "✏️ Editar"** no canto superior direito do cabeçalho + data de publicação + badge de atualizado (quando houver) + conteúdo completo (font-size lg, line-height 1.8) + dois CTAs de voltar |
 | 🔍 **Não encontrado (404)** | Backend retorna status 404 | Tela dedicada: ícone, título "Post não encontrado", mensagem explicativa + dois CTAs de retorno |
 | ⚠️ **Erro genérico** | Falha de rede ou servidor | `ErrorState` com explicação e botão de retry |
+
+**Botão "✏️ Editar" (cabeçalho do post)**:
+- Posição: canto superior direito do cabeçalho do post, lado do título
+- Estilo: botão `secondary` tamanho `sm` (subtil, não compete com o conteúdo)
+- Comportamento: ao clicar, navega para a rota `/posts/:id/edit` abrindo a tela de edição com os dados já pré-carregados do post
+- Acessibilidade: `aria-label` dinâmico com o título do post para leitores de tela
 
 **Navegação de volta (dupla camada)**:
 - Botão compacto no topo: "← Voltar para posts" (usa `useNavigate('/')`)
@@ -392,6 +430,68 @@ Apenas **dois campos** são exibidos no formulário, ambos obrigatórios:
 | ⚠️ **403 Forbidden** | Token de **aluno** foi usado ao invés de professor | Banner contextualizado: *"Criação de posts é exclusiva para o perfil de professor. Verifique o token configurado em api.ts."* |
 | ⚠️ **5xx Servidor** | Erro interno (banco, etc.) | Mensagem amigável para tentar novamente mais tarde |
 
+### Funcionalidade: Edição de Posts (Atualizar Conteúdo)
+
+A página de edição permite que um usuário com **perfil de professor** atualize o título e/ou conteúdo de um post já publicado. A **data de publicação original é preservada em 100%** — apenas a **data de atualização** é automaticamente alterada no submit.
+
+#### Acesso
+- Botão **"✏️ Editar"** no canto superior direito do cabeçalho do post, dentro da página de detalhe ([PostDetail.tsx](src/pages/PostDetail/PostDetail.tsx#L338-L362))
+- Atalho direto via URL `/posts/:id/edit` (requer que o `:id` seja de um post existente)
+
+#### Pré-carregamento automático
+Ao abrir a tela, a aplicação executa **imediatamente** um `GET /posts/:id` com token de professor e, quando a resposta retorna com sucesso:
+1. O valor original do `titulo` é preenchido automaticamente no `<input>`
+2. O valor original do `conteudo` é preenchido automaticamente no `<textarea>`
+3. Um banner informativo exibe os metadados originais do post (ID, Data de publicação, Última atualização) para referência do usuário
+
+#### Campos visíveis para o usuário
+Apenas **dois campos editáveis**, ambos com as mesmas regras de validação idênticas às da criação:
+
+| Campo | Tipo | Regras de validação cliente |
+|---|---|---|
+| **Título** | `<input type="text">` (valor pré-preenchido) | Obrigatório · mínimo 3 caracteres · máximo 255 caracteres |
+| **Conteúdo** | `<textarea>` (280px altura mínima, valor pré-preenchido) | Obrigatório · mínimo 10 caracteres · máximo 10.000 caracteres · suporta quebras de linha (`white-space: pre-wrap`) |
+
+> ⚠️ **REGRA DE NEGÓCIO IMPORTANTE — Documentação das datas em edição** (enviado automaticamente):
+> Ao contrário da criação (que envia duas datas), a **edição envia APENAS `data_atualizacao`** atualizada. O campo `data_publicacao` **NÃO É ENVIADO NO PAYLOAD** de forma alguma, garantindo que permaneça preservado exatamente como no momento da publicação original.
+> ```ts
+> const payload = {
+>   titulo: titulo.trim(),
+>   conteudo: conteudo.trim(),
+>   data_atualizacao: new Date().toISOString(),  // ← ÚNICO campo de data enviado
+>   // data_publicacao: NÃO ENVIA — preservada no backend
+> };
+> await apiProfessor.put(`/posts/${id}`, payload);
+> ```
+> O backend, por sua vez, confirma essa regra: ignora completamente qualquer `data_publicacao` caso receba, e apenas atualiza `data_atualizacao` junto com os campos alteráveis.
+
+#### Banner informativo de metadados (não é dica genérica)
+No topo do formulário de edição é exibido um banner contextual com os **dados reais do recurso em edição**:
+- 🆔 ID do post
+- 📅 Data de publicação original (formatada em pt-BR)
+- 🔄 Data da última atualização (formatada em pt-BR)
+- 📝 Um parágrafo explicativo: *"Os campos título e conteúdo podem ser alterados. A data de publicação não é alterada em edições — apenas a data de atualização é atualizada automaticamente ao clicar em 'Salvar Alterações'."*
+
+#### Ações (rodapé do formulário)
+| Botão | Variante | Comportamento |
+|---|---|---|
+| **Cancelar** | `secondary` | Volta para a página de detalhe **desse mesmo post** (`navigate('/posts/:id')`) sem salvar nenhuma alteração |
+| **Salvar Alterações** | `primary` (tamanho `lg`) | Valida o formulário, gera a `data_atualizacao` atual, executa `PUT /posts/:id` e enquanto aguarda: spinner inline + label muda para "Salvando..." |
+
+#### Estados tratados
+A página de edição possui **dois loadings independentes** (separados por semântica):
+
+| Estado | Gatilho | Apresentação |
+|---|---|---|
+| 🌀 **Loading fetch (inicial)** | Carregando dados do post via `GET` | Spinner com mensagem "Carregando dados do post..." + botão de voltar disponível |
+| 🌀 **Loading submit (salvar)** | Enviando alterações via `PUT` | Spinner com mensagem "Salvando..." + inputs e botão desabilitados |
+| ✅ **Sucesso (200 OK)** | Backend retorna o post atualizado | Redirecionamento imediato para `/posts/<id>` usando `navigate()` com `state: { justUpdated: true, fromEdit: true }` (permite futuro toast "Alterações salvas com sucesso") |
+| 🔍 **Não encontrado (404)** no fetch inicial | Post com esse `:id` não existe | Tela dedicada: ícone, título "Post não encontrado para edição", mensagem explicativa + CTAs de retorno (voltar listagem ou tentar outro id) |
+| ⚠️ **400 Bad Request** submit | Backend rejeita payload por validação | Banner de erro destacado em vermelho com a mensagem exata do servidor |
+| ⚠️ **401 Unauthorized** fetch ou submit | Token ausente/malformado/inválido | Banner explicativo para verificar configuração do token |
+| ⚠️ **403 Forbidden** fetch ou submit | Token de **aluno** foi usado ao invés de professor | Banner contextualizado: *"Edição de posts é exclusiva para o perfil de professor. Verifique o token configurado em api.ts."* |
+| ⚠️ **5xx Servidor** fetch ou submit | Erro interno (banco, etc.) | Mensagem amigável para tentar novamente mais tarde (no fetch: retry disponível; no submit: erro inline acima do formulário) |
+
 ### Fluxo de Autenticação
 
 A API backend exige autenticação via header:
@@ -404,9 +504,9 @@ Atualmente a aplicação usa **dois tokens separados** configurados em [api.ts](
 | Export no `api.ts` | Token hardcoded | Perfil | Permissões | Uso atual no código |
 |---|---|---|---|---|
 | `apiAluno` (default `api`) | `aluno-dev-token-change-me` | **Aluno** | Apenas **leitura**: GET `/posts`, `/posts/:id`, `/posts/search` | Listagem (`PostList`) e Detalhe (`PostDetail`) |
-| `apiProfessor` (export nomeado) | `professor-dev-token-change-me` | **Professor** | **Leitura + escrita**: GET + **POST** `/posts` + PUT `/posts/:id` + DELETE `/posts/:id` | Criação (`PostCreate`) |
+| `apiProfessor` (export nomeado) | `professor-dev-token-change-me` | **Professor** | **Leitura + escrita**: GET + **POST** `/posts` + **PUT** `/posts/:id` + DELETE `/posts/:id` | Criação (`PostCreate`) + **Edição** (`PostEdit` para o `PUT /posts/:id` e também o `GET /posts/:id` de pré-carregamento) |
 
-> ⚠️ **Aviso**: Tokens hardcoded são aceitáveis nesta fase de aprendizado. Para produção, implemente fluxo de login real (OAuth/JWT) e armazene tokens de forma segura (HttpOnly cookies ou localStorage com medidas anti-XSS). Em caso de **403 Forbidden** ao criar post, confira se o token de professor em [api.ts](src/api.ts#L4) corresponde ao `PROFESSOR_ACCESS_TOKEN` do backend `.env`.
+> ⚠️ **Aviso**: Tokens hardcoded são aceitáveis nesta fase de aprendizado. Para produção, implemente fluxo de login real (OAuth/JWT) e armazene tokens de forma segura (HttpOnly cookies ou localStorage com medidas anti-XSS). Em caso de **403 Forbidden** ao criar ou editar post, confira se o token de professor em [api.ts](src/api.ts#L4) corresponde ao `PROFESSOR_ACCESS_TOKEN` do backend `.env`.
 
 ---
 
