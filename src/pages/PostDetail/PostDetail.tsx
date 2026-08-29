@@ -5,6 +5,7 @@ import api from '../../api';
 import type { Post } from '../../types';
 import Loading from '../../components/Loading/Loading';
 import ErrorState from '../../components/ErrorState/ErrorState';
+import Button from '../../components/Button/Button';
 
 const BackButton = styled.button`
   display: inline-flex;
@@ -55,6 +56,18 @@ const PostHeader = styled.header`
   @media (prefers-color-scheme: dark) {
     border-color: ${({ theme }) => theme.colors.dark.border};
   }
+`;
+
+const PostHeaderTop = styled.div`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: ${({ theme }) => theme.spacing.md};
+  flex-wrap: wrap;
+`;
+
+const EditButtonWrapper = styled.div`
+  flex-shrink: 0;
 `;
 
 const PostTitle = styled.h1`
@@ -323,7 +336,20 @@ function PostDetail() {
       </BackButton>
 
       <PostHeader>
-        <PostTitle>{post.titulo}</PostTitle>
+        <PostHeaderTop>
+          <PostTitle>{post.titulo}</PostTitle>
+          <EditButtonWrapper>
+            <Link to={`/posts/${post.id}/edit`} style={{ textDecoration: 'none' }}>
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label={`Editar post ${post.titulo}`}
+              >
+                ✏️ Editar
+              </Button>
+            </Link>
+          </EditButtonWrapper>
+        </PostHeaderTop>
         <PostMeta>
           <MetaItem>📅 Publicado em {formatDate(post.data_publicacao)}</MetaItem>
           {updated && (
