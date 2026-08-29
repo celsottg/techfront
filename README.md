@@ -12,8 +12,9 @@ Funcionalidades ativas:
 - ✅ Listagem paginada de posts
 - ✅ Busca de posts por palavra-chave (título/conteúdo)
 - ✅ Visualização detalhada de post (conteúdo expandido)
-- ✅ Estados completos (loading, erro, vazio e404)
-- ✅ Navegação SPA entre listagem e detalhe
+- ✅ Criação de novos posts por perfil de professor
+- ✅ Estados completos (loading, erro, vazio, 404, validação, 401/403)
+- ✅ Navegação SPA entre listagem, detalhe e criação de posts
 
 ---
 
@@ -38,6 +39,8 @@ techfront/
 │   │   │   └── Footer.tsx
 │   │   ├── PostCard/                  # Card individual de exibição de post
 │   │   │   └── PostCard.tsx
+│   │   ├── Button/                    # Botão reutilizável (primary/secondary + loading)
+│   │   │   └── Button.tsx
 │   │   ├── Loading/                   # Estado de carregamento (spinner)
 │   │   │   └── Loading.tsx
 │   │   ├── ErrorState/                # Estado de erro com botão de retry
@@ -48,8 +51,10 @@ techfront/
 │   ├── pages/                         # Páginas/Features (container components)
 │   │   ├── PostList/                  # Listagem completa de posts
 │   │   │   └── PostList.tsx
-│   │   └── PostDetail/                # Visualização detalhada de um post
-│   │       └── PostDetail.tsx
+│   │   ├── PostDetail/                # Visualização detalhada de um post
+│   │   │   └── PostDetail.tsx
+│   │   └── PostCreate/                # Formulário de criação de novo post
+│   │       └── PostCreate.tsx
 │   │
 │   ├── reducers/                      # Funções puras (useReducer pattern)
 │   │   └── postReducer.ts             # Redutor para operações CRUD de posts
@@ -76,13 +81,13 @@ techfront/
 | Camada | Arquivo(s) | Responsabilidade |
 |--------|-----------|-----------------|
 | **Tipos** | [types.ts](src/types.ts) | Definições de interfaces `Post`, respostas paginadas, ações do reducer |
-| **API** | [api.ts](src/api.ts) | Instância Axios com `baseURL`, timeout e header de autenticação Bearer |
+| **API** | [api.ts](src/api.ts) | Duas instâncias Axios: `apiAluno` (leitura, token aluno) e `apiProfessor` (escrita, token professor), com `baseURL` via proxy e timeout |
 | **Estado** | [postReducer.ts](src/reducers/postReducer.ts) | Lógica pura de transformação de estado: `SET_POSTS`, `ADD_POST`, `UPDATE_POST`, `REMOVE_POST` |
 | **Tema** | [theme.ts](src/styles/theme.ts) | Design System completo (cores, tipografia, espaçamentos, breakpoints) + `GlobalStyles` |
-| **Estrutural** | `components/Header`, `components/MainContent`, `components/Footer` | Layout base da aplicação (esqueleto visual) |
-| **Feature** | `pages/PostList`, `pages/PostDetail` | Lógica de negócio: listagem (fetch, busca, paginação) e detalhe (fetch por id, navegação de volta) |
-| **UI** | `components/PostCard`, `Loading`, `ErrorState`, `EmptyState` | Componentes de apresentação reutilizáveis |
-| **Raiz** | [App.tsx](src/App.tsx) | Orquestrador: une layout estrutural + rotas do React Router |
+| **Estrutural** | `components/Header`, `components/MainContent`, `components/Footer` | Layout base da aplicação (esqueleto visual). Header possui também inclui o botão "Novo Post" |
+| **Feature** | `pages/PostList`, `pages/PostDetail`, `pages/PostCreate` | Lógica de negócio: listagem (fetch, busca, paginação), detalhe (fetch por id, navegação de volta) e criação (formulário controlado, validações cliente, datas automáticas, submit autenticado) |
+| **UI** | `components/PostCard`, `components/Button`, `Loading`, `ErrorState`, `EmptyState` | Componentes de apresentação reutilizáveis (Button: primary/secondary/sm/md/lg/loading/fullWidth) |
+| **Raiz** | [App.tsx](src/App.tsx) | Orquestrador: une layout estrutural + rotas do React Router (3 rotas: `/`, `/posts/create`, `/posts/:id` com ordem correta) |
 
 ### Fluxo de Dados (Data Flow)
 
@@ -91,12 +96,15 @@ main.tsx
   ├── ThemeProvider (styled-components)   ← tema + GlobalStyles
   ├── BrowserRouter (react-router-dom)    ← roteamento SPA
   └── App.tsx
-        ├── Header (nav com Links)
+        ├── Header (sticky top)
+        │     ├── Left: Logo + Nav (Link para /)
+        │     └── Right: Link "/posts/create" → Button "+ Novo Post"
+        │                                     (desktop: "Novo Post" texto, mobile: só ícone +)
         ├── MainContent
         │     └── Routes
         │           ├── "/" → PostList (page)
         │           │     ├── useState: posts, loading, error, search, page
-        │           │     ├── useEffect → api.get('/posts') ou '/posts/search'
+        │           │     ├── useEffect → apiAluno.get('/posts') ou '/posts/search'
         │           │     ├── axios → proxy vite → backend localhost:3000
         │           │     └── renderiza:
         │           │           ├── Loading (spinner)
@@ -104,11 +112,28 @@ main.tsx
         │           │           ├── EmptyState
         │           │           └── PostsGrid com PostCard[] (Links para /posts/:id) + Paginação
         │           │
+        │           ├── "/posts/create" → PostCreate (page)  ← rota ANTES de /posts/:id
+        │           │     ├── useState: titulo, conteudo, errors, touched, loading, submitError
+        │           │     ├── validateForm(): titulo [3..255] + conteudo [10..10.000] chars
+        │           │     ├── handleSubmit:
+        │           │     │     ├── nowISO = new Date().toISOString()  ← datas AUTOMÁTICAS
+        │           │     │     ├── payload: { titulo, conteudo, data_publicacao, data_atualizacao }
+        │           │     │     ├── apiProfessor.post('/posts', payload)  ← token PROFESSOR (403 tratado)
+        │           │     │     └── SUCESSO → navigate(`/posts/${created.id}`, state: { justCreated })
+        │           │     └── renderiza:
+        │           │           ├── BackButton (voltar /)
+        │           │           ├── Loading submit ("Criando post...")
+        │           │           ├── ErrorBanner (401/403/400/5xx com mensagens contextuais)
+        │           │           ├── FormCard:
+        │           │           │     ├── Título: input obrigatório + contador + borda erro + helper
+        │           │           │     └── Conteúdo: textarea 280px + contador + borda erro + helper
+        │           │           └── Actions: [Cancelar (secondary)] + [Gravar Post (primary LG, loading)]
+        │           │
         │           └── "/posts/:id" → PostDetail (page)
         │                 ├── useParams<{ id }> (extrai :id da URL)
         │                 ├── useNavigate (voltar para listagem)
         │                 ├── useState: post, loading, error, notFound
-        │                 ├── useCallback + useEffect → api.get(`/posts/${id}`)
+        │                 ├── useCallback + useEffect → apiAluno.get(`/posts/${id}`)
         │                 ├── axios → proxy vite → backend localhost:3000
         │                 └── renderiza:
         │                       ├── BackButton (botão voltar)
@@ -138,21 +163,26 @@ main.tsx
 ## ✅ Padrões e Boas Práticas Adotados
 
 ### Integração com Back-End
-- ✅ **CRUD preparado** (atualmente implementado: GET listagem + busca + detalhe por id)
-- ✅ **Estados visuais completos**: loading, sucesso, erro (com retry), empty, **404 (não encontrado)**
+- ✅ **CRUD iniciado** (implementado: GET listagem, busca, detalhe por id e **POST /posts** criação)
+- ✅ **Dois perfis de autenticação separados**: `apiAluno` (leitura) e `apiProfessor` (escrita, permissão POST/PUT/DELETE na API)
+- ✅ **Datas automáticas no envio** (transparente para o usuário): `data_publicacao` e `data_atualizacao` são sempre geradas como `new Date().toISOString()` no momento do submit (não há campo para o usuário digitar data)
+- ✅ **Estados visuais completos**: loading, sucesso, erro (com retry), empty, **404**, **validação cliente side**, **401 (auth)** e **403 (perfil sem permissão)** com mensagens contextuais
 - ✅ **Paginação** no servidor (10 itens por página)
 - ✅ **Busca com debounce** (400ms) via endpoint `/posts/search`
 - ✅ **Detalhe por ID** via endpoint `/posts/:id` com tratamento de 404
+- ✅ **Criação via POST /posts** usando token de professor, payload com `titulo`, `conteudo` + datas automáticas, e redirect para `/posts/:id` do post recém-criado no sucesso
 - ✅ **Axios configurado** com proxy Vite (evita CORS em desenvolvimento)
-- ✅ **Autenticação Bearer token** (perfil aluno para leitura)
-- ✅ **Navegação SPA** via React Router DOM (listagem ↔ detalhe, sem recarregar página)
+- ✅ **Autenticação Bearer token** (perfil aluno para leitura, perfil professor para escrita)
+- ✅ **Navegação SPA** via React Router DOM (listagem ↔ detalhe ↔ criação, sem recarregar página)
 - ✅ **Preview truncado no card** (4 linhas) com indicativo "Ler mais →"
+- ✅ **Botão reutilizável**: `components/Button` com variantes `primary/secondary`, tamanhos `sm/md/lg`, estado `loading` com spinner inline e suporte a `fullWidth`
 
 ### Desenvolvimento React
 - ✅ **Componentes Funcionais** exclusivos (sem classes)
-- ✅ **React Hooks** nativos: `useState`, `useEffect`, `useCallback`, `useParams`, `useNavigate`, `useLocation`, `useReducer` (preparado)
+- ✅ **React Hooks** nativos: `useState`, `useEffect`, `useCallback`, `useParams`, `useNavigate`, `useLocation`, `useReducer` (preparado), `FormEvent`, `ChangeEvent` (formulários)
 - ✅ **Modularização atômica**: componentes pequenos, focados e reutilizáveis
-- ✅ **TypeScript strict mode**: tipagem forte em todo o projeto
+- ✅ **TypeScript strict mode**: tipagem forte em todo o projeto (formulários, styled-components `$props` transientes, payloads, responses)
+- ✅ **Formulários controlados** com validação cliente: campos obrigatórios, tamanhos mín/máx, validação no blur + validação completa no submit, contadores de caracteres em tempo real
 
 ### Estilização e Responsividade
 - ✅ **Styled Components** com tema tipado (Design System completo)
@@ -257,14 +287,17 @@ Isso evita problemas de **CORS** durante o desenvolvimento.
 
 ### Navegação
 
-A aplicação atualmente possui **2 rotas ativas**:
+A aplicação atualmente possui **3 rotas ativas**:
 
 | Rota | Caminho | Componente | Descrição |
 |---|---|---|---|
 | **Home / Posts** | `/` | [PostList](src/pages/PostList/PostList.tsx) | Listagem paginada de todos os posts com busca e preview truncado |
+| **Criar Post** | `/posts/create` | [PostCreate](src/pages/PostCreate/PostCreate.tsx) | Formulário de criação de novo post (acessível pelo botão "Novo Post" no cabeçalho) |
 | **Detalhe do Post** | `/posts/:id` | [PostDetail](src/pages/PostDetail/PostDetail.tsx) | Visualização expandida do conteúdo completo com navegação de volta |
 
-A navegação ocorre pelo cabeçalho fixo ([Header](src/components/Header/Header.tsx)) com o link ativo destacado visualmente, e também clicando nos cards da listagem.
+> ⚠️ **Ordem das rotas no roteador**: Em [App.tsx](src/App.tsx) a rota `/posts/create` é **sempre declarada antes** de `/posts/:id`, para evitar que a palavra literal `create` seja interpretada como um ID dinâmico.
+
+A navegação ocorre pelo cabeçalho fixo ([Header](src/components/Header/Header.tsx)) com link ativo destacado, botão **"+ Novo Post"** (acessa a tela de criação), e também clicando nos cards da listagem.
 
 ### Funcionalidade Principal: Listagem de Posts
 
@@ -272,7 +305,8 @@ A navegação ocorre pelo cabeçalho fixo ([Header](src/components/Header/Header
 2. **Busca**: Digite no campo de busca para pesquisar por **título ou conteúdo** com debounce de 400ms → `GET /posts/search?search=termo`
 3. **Paginação**: Use os botões no rodapé da lista para navegar entre as páginas (mostra 1ª, última e vizinhas com `...`)
 4. **Abrir detalhe**: Clique em qualquer card da lista para navegar até `/posts/:id` e visualizar o conteúdo completo
-5. **Estados visuais**:
+5. **Criar novo post**: Clique no botão **"+" / "Novo Post"** no canto superior direito do cabeçalho para abrir `/posts/create`
+6. **Estados visuais**:
    - 🌀 **Carregando**: Spinner animado
    - ⚠️ **Erro**: Mensagem explicativa + botão "Tentar novamente"
    - 📝 **Vazio**: Ícone + mensagem amigável
@@ -304,6 +338,60 @@ A página de detalhe exibe o conteúdo completo de um post selecionado a partir 
 
 > 💡 O conteúdo no card da listagem é limitado a **4 linhas** (CSS `-webkit-line-clamp: 4`) e exibe o indicativo "Ler mais →", orientando o usuário a clicar para expandir o post completo.
 
+### Funcionalidade: Criação de Posts (Novo Post)
+
+A página de criação permite que um usuário com **perfil de professor** publique novos conteúdos no blog.
+
+#### Acesso
+- Botão **"+ Novo Post"** fixo no canto superior direito do cabeçalho ([Header.tsx](src/components/Header/Header.tsx#L122-L127))
+  - Desktop (≥769px): Exibe o texto completo `"Novo Post"`
+  - Mobile/tablet (≤768px): Exibe apenas o ícone `+` (compacto, sem texto)
+- Atalho direto via URL `/posts/create`
+
+#### Campos visíveis para o usuário
+Apenas **dois campos** são exibidos no formulário, ambos obrigatórios:
+
+| Campo | Tipo | Regras de validação cliente |
+|---|---|---|
+| **Título** | `<input type="text">` | Obrigatório · mínimo 3 caracteres · máximo 255 caracteres |
+| **Conteúdo** | `<textarea>` (280px altura mínima, `resize: vertical`) | Obrigatório · mínimo 10 caracteres · máximo 10.000 caracteres · suporta quebras de linha (`white-space: pre-wrap`) |
+
+> ⚠️ **Campos ocultos (enviados automaticamente)** — **Atenção documentação**:
+> As datas **não são exibidas para o usuário** e nem existem como campos de formulário. No momento em que o botão **"Gravar Post"** é clicado, o frontend **gera automaticamente** ambas as datas em formato ISO:
+> ```ts
+> const nowISO = new Date().toISOString();
+> const payload = {
+>   titulo: titulo.trim(),
+>   conteudo: conteudo.trim(),
+>   data_publicacao: nowISO,   // ← gerada automaticamente
+>   data_atualizacao: nowISO,  // ← gerada automaticamente (mesmo valor da publicação ao criar)
+> };
+> ```
+> O payload resultante é enviado ao backend via `POST /posts` com **token de professor**.
+
+#### Feedback visual e validação
+- **Validação "lazy" (ao sair do campo)**: Mensagens de erro aparecem apenas após o `onBlur`
+- **Validação "eager" (no submit)**: Ao clicar em Gravar, todos os campos são validados e marcados como "tocados" em uma única passagem
+- **Contadores em tempo real** (canto inferior direito de cada campo) com destaque amarelo quando o texto chega a 90% do limite
+- **Borda vermelha + helper de erro** abaixo do campo quando houver violação de regra
+
+#### Ações (rodapé do formulário)
+| Botão | Variante | Comportamento |
+|---|---|---|
+| **Cancelar** | `secondary` | Volta para a listagem (`navigate('/')`) sem salvar nada |
+| **Gravar Post** | `primary` (tamanho `lg`) | Valida o formulário, gera datas automáticas, executa `POST /posts` e enquanto aguarda: spinner inline + label muda para "Gravando..." |
+
+#### Estados tratados (submit)
+
+| Estado | Gatilho | Apresentação |
+|---|---|---|
+| 🌀 **Loading submit** | Requisição em andamento | Toda a página mostra `<Loading>` com mensagem "Criando post..." + botão desabilitado |
+| ✅ **Sucesso (201 Created)** | Backend retorna o `Post` criado com ID | Redirecionamento imediato para `/posts/<novo-id>` usando `navigate()` com `state: { justCreated: true }` (permite futuro toast de confirmação) |
+| ⚠️ **400 Bad Request** | Backend rejeita payload por validação | Banner de erro destacado em vermelho com a mensagem exata do servidor |
+| ⚠️ **401 Unauthorized** | Token ausente/malformado/inválido | Banner explicativo para verificar configuração do token |
+| ⚠️ **403 Forbidden** | Token de **aluno** foi usado ao invés de professor | Banner contextualizado: *"Criação de posts é exclusiva para o perfil de professor. Verifique o token configurado em api.ts."* |
+| ⚠️ **5xx Servidor** | Erro interno (banco, etc.) | Mensagem amigável para tentar novamente mais tarde |
+
 ### Fluxo de Autenticação
 
 A API backend exige autenticação via header:
@@ -311,13 +399,14 @@ A API backend exige autenticação via header:
 Authorization: Bearer <access_token>
 ```
 
-Atualmente a aplicação usa o **token de aluno** configurado em [api.ts](src/api.ts#L3):
-- `aluno-dev-token-change-me` → permissões de **leitura** (GET /posts, GET /posts/:id, GET /posts/search)
+Atualmente a aplicação usa **dois tokens separados** configurados em [api.ts](src/api.ts#L3-L25), exportados como duas instâncias independentes do Axios:
 
-Para operações de escrita (POST, PUT, DELETE), será necessário implementar seleção de perfil e usar o token de professor:
-- `professor-dev-token-change-me` → permissões de **leitura + escrita**
+| Export no `api.ts` | Token hardcoded | Perfil | Permissões | Uso atual no código |
+|---|---|---|---|---|
+| `apiAluno` (default `api`) | `aluno-dev-token-change-me` | **Aluno** | Apenas **leitura**: GET `/posts`, `/posts/:id`, `/posts/search` | Listagem (`PostList`) e Detalhe (`PostDetail`) |
+| `apiProfessor` (export nomeado) | `professor-dev-token-change-me` | **Professor** | **Leitura + escrita**: GET + **POST** `/posts` + PUT `/posts/:id` + DELETE `/posts/:id` | Criação (`PostCreate`) |
 
-> ⚠️ **Aviso**: Tokens hardcoded são aceitáveis nesta fase de aprendizado. Para produção, implemente fluxo de login real (OAuth/JWT) e armazene tokens de forma segura (HttpOnly cookies ou localStorage com medidas anti-XSS).
+> ⚠️ **Aviso**: Tokens hardcoded são aceitáveis nesta fase de aprendizado. Para produção, implemente fluxo de login real (OAuth/JWT) e armazene tokens de forma segura (HttpOnly cookies ou localStorage com medidas anti-XSS). Em caso de **403 Forbidden** ao criar post, confira se o token de professor em [api.ts](src/api.ts#L4) corresponde ao `PROFESSOR_ACCESS_TOKEN` do backend `.env`.
 
 ---
 
