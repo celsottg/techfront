@@ -4,6 +4,7 @@ import MainContent from './components/MainContent/MainContent';
 import Footer from './components/Footer/Footer';
 import PostList from './pages/PostList/PostList';
 import PostDetail from './pages/PostDetail/PostDetail';
+import PostCreate from './pages/PostCreate/PostCreate';
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
       <MainContent>
         <Routes>
           <Route path="/" element={<PostList />} />
+          <Route path="/posts/create" element={<PostCreate />} />
           <Route path="/posts/:id" element={<PostDetail />} />
         </Routes>
       </MainContent>

@@ -1,5 +1,6 @@
 import styled from 'styled-components';
 import { Link, useLocation } from 'react-router-dom';
+import Button from '../Button/Button';
 
 const HeaderContainer = styled.header`
   width: 100%;
@@ -27,6 +28,18 @@ const HeaderContent = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: ${({ theme }) => theme.spacing.md};
+`;
+
+const LeftSection = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.lg};
+`;
+
+const RightSection = styled.div`
+  display: flex;
+  align-items: center;
   gap: ${({ theme }) => theme.spacing.md};
 `;
 
@@ -78,18 +91,41 @@ const NavLinkStyled = styled(Link)<{ $active?: boolean }>`
   }
 `;
 
+const MobileButtonText = styled.span`
+  @media (max-width: ${({ theme }) => theme.breakpoints.tablet}) {
+    display: none;
+  }
+`;
+
+const MobilePlusIcon = styled.span`
+  @media (min-width: calc(768px + 1px)) {
+    display: none;
+  }
+`;
+
 function Header() {
   const location = useLocation();
+  const isHome = location.pathname === '/';
 
   return (
     <HeaderContainer>
       <HeaderContent>
-        <Logo to="/">TechFront</Logo>
-        <Nav>
-          <NavLinkStyled to="/" $active={location.pathname === '/'}>
-            Posts
-          </NavLinkStyled>
-        </Nav>
+        <LeftSection>
+          <Logo to="/">TechFront</Logo>
+          <Nav>
+            <NavLinkStyled to="/" $active={isHome}>
+              Posts
+            </NavLinkStyled>
+          </Nav>
+        </LeftSection>
+        <RightSection>
+          <Link to="/posts/create" style={{ textDecoration: 'none' }}>
+            <Button variant="primary" size="sm" aria-label="Criar novo post">
+              <MobilePlusIcon aria-hidden="true">+</MobilePlusIcon>
+              <MobileButtonText>Novo Post</MobileButtonText>
+            </Button>
+          </Link>
+        </RightSection>
       </HeaderContent>
     </HeaderContainer>
   );
