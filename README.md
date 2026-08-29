@@ -1,12 +1,19 @@
-# TechFront
+# TechFront - Blog
 
-Aplicação front-end para o TechFront, desenvolvida com React + TypeScript + Vite, seguindo boas práticas de arquitetura, estilização e integração com API REST.
+Aplicação front-end para o blog TechFront, desenvolvida com React + TypeScript + Vite, seguindo boas práticas de arquitetura, estilização e integração com API REST.
 
 ---
 
 ## 📋 Visão Geral
 
 O TechFront é uma interface de blog que consome uma API REST (Fastify + PostgreSQL) rodando na porta 3000 do localhost. A aplicação foi desenvolvida seguindo os princípios de **Feature-Sliced Design (FSD) simplificado**, com separação clara de responsabilidades entre camadas.
+
+Funcionalidades ativas:
+- ✅ Listagem paginada de posts
+- ✅ Busca de posts por palavra-chave (título/conteúdo)
+- ✅ Visualização detalhada de post (conteúdo expandido)
+- ✅ Estados completos (loading, erro, vazio e404)
+- ✅ Navegação SPA entre listagem e detalhe
 
 ---
 
@@ -39,8 +46,10 @@ techfront/
 │   │       └── EmptyState.tsx
 │   │
 │   ├── pages/                         # Páginas/Features (container components)
-│   │   └── PostList/                  # Listagem completa de posts
-│   │       └── PostList.tsx
+│   │   ├── PostList/                  # Listagem completa de posts
+│   │   │   └── PostList.tsx
+│   │   └── PostDetail/                # Visualização detalhada de um post
+│   │       └── PostDetail.tsx
 │   │
 │   ├── reducers/                      # Funções puras (useReducer pattern)
 │   │   └── postReducer.ts             # Redutor para operações CRUD de posts
@@ -55,7 +64,6 @@ techfront/
 │   └── vite-env.d.ts                  # Tipos do Vite
 │
 ├── public/                            # Arquivos públicos (favicon, ícones)
-├── docs/                              # Documentação técnica
 ├── index.html                         # HTML de entrada
 ├── package.json
 ├── tsconfig.json                      # Configuração TypeScript
@@ -72,7 +80,7 @@ techfront/
 | **Estado** | [postReducer.ts](src/reducers/postReducer.ts) | Lógica pura de transformação de estado: `SET_POSTS`, `ADD_POST`, `UPDATE_POST`, `REMOVE_POST` |
 | **Tema** | [theme.ts](src/styles/theme.ts) | Design System completo (cores, tipografia, espaçamentos, breakpoints) + `GlobalStyles` |
 | **Estrutural** | `components/Header`, `components/MainContent`, `components/Footer` | Layout base da aplicação (esqueleto visual) |
-| **Feature** | `pages/PostList` | Lógica de negócio da listagem (fetch, busca, paginação, estados) |
+| **Feature** | `pages/PostList`, `pages/PostDetail` | Lógica de negócio: listagem (fetch, busca, paginação) e detalhe (fetch por id, navegação de volta) |
 | **UI** | `components/PostCard`, `Loading`, `ErrorState`, `EmptyState` | Componentes de apresentação reutilizáveis |
 | **Raiz** | [App.tsx](src/App.tsx) | Orquestrador: une layout estrutural + rotas do React Router |
 
@@ -86,15 +94,28 @@ main.tsx
         ├── Header (nav com Links)
         ├── MainContent
         │     └── Routes
-        │           └── "/" → PostList (page)
-        │                 ├── useState: posts, loading, error, search, page
-        │                 ├── useEffect → api.get('/posts') ou '/posts/search'
+        │           ├── "/" → PostList (page)
+        │           │     ├── useState: posts, loading, error, search, page
+        │           │     ├── useEffect → api.get('/posts') ou '/posts/search'
+        │           │     ├── axios → proxy vite → backend localhost:3000
+        │           │     └── renderiza:
+        │           │           ├── Loading (spinner)
+        │           │           ├── ErrorState (retry)
+        │           │           ├── EmptyState
+        │           │           └── PostsGrid com PostCard[] (Links para /posts/:id) + Paginação
+        │           │
+        │           └── "/posts/:id" → PostDetail (page)
+        │                 ├── useParams<{ id }> (extrai :id da URL)
+        │                 ├── useNavigate (voltar para listagem)
+        │                 ├── useState: post, loading, error, notFound
+        │                 ├── useCallback + useEffect → api.get(`/posts/${id}`)
         │                 ├── axios → proxy vite → backend localhost:3000
         │                 └── renderiza:
+        │                       ├── BackButton (botão voltar)
         │                       ├── Loading (spinner)
         │                       ├── ErrorState (retry)
-        │                       ├── EmptyState
-        │                       └── PostsGrid com PostCard[] + Paginação
+        │                       ├── PostNotFound (404)
+        │                       └── Detalhe completo: Título grande + Metadados + Conteúdo full + BackToList
         └── Footer
 ```
 
@@ -116,9 +137,20 @@ main.tsx
 
 ## ✅ Padrões e Boas Práticas Adotados
 
+### Integração com Back-End
+- ✅ **CRUD preparado** (atualmente implementado: GET listagem + busca + detalhe por id)
+- ✅ **Estados visuais completos**: loading, sucesso, erro (com retry), empty, **404 (não encontrado)**
+- ✅ **Paginação** no servidor (10 itens por página)
+- ✅ **Busca com debounce** (400ms) via endpoint `/posts/search`
+- ✅ **Detalhe por ID** via endpoint `/posts/:id` com tratamento de 404
+- ✅ **Axios configurado** com proxy Vite (evita CORS em desenvolvimento)
+- ✅ **Autenticação Bearer token** (perfil aluno para leitura)
+- ✅ **Navegação SPA** via React Router DOM (listagem ↔ detalhe, sem recarregar página)
+- ✅ **Preview truncado no card** (4 linhas) com indicativo "Ler mais →"
+
 ### Desenvolvimento React
 - ✅ **Componentes Funcionais** exclusivos (sem classes)
-- ✅ **React Hooks** nativos: `useState`, `useEffect`, `useCallback`, `useReducer` (preparado)
+- ✅ **React Hooks** nativos: `useState`, `useEffect`, `useCallback`, `useParams`, `useNavigate`, `useLocation`, `useReducer` (preparado)
 - ✅ **Modularização atômica**: componentes pequenos, focados e reutilizáveis
 - ✅ **TypeScript strict mode**: tipagem forte em todo o projeto
 
@@ -127,14 +159,6 @@ main.tsx
 - ✅ **Mobile-first**: breakpoints `480px` / `768px` / `1024px` / `1280px`
 - ✅ **Dark mode** automático via `@media (prefers-color-scheme: dark)`
 - ✅ **Grid flexível e layouts fluidos** com CSS moderno
-
-### Integração com Back-End
-- ✅ **CRUD preparado** (atualmente implementado: GET listagem + busca)
-- ✅ **Estados visuais completos**: loading, sucesso, erro (com retry), empty
-- ✅ **Paginação** no servidor (10 itens por página)
-- ✅ **Busca com debounce** (400ms) via endpoint `/posts/search`
-- ✅ **Axios configurado** com proxy Vite (evita CORS em desenvolvimento)
-- ✅ **Autenticação Bearer token** (perfil aluno para leitura)
 
 ### Gerenciamento de Estado
 - ✅ **Estado local** (`useState`) para controle de UI (busca, página)
@@ -233,24 +257,52 @@ Isso evita problemas de **CORS** durante o desenvolvimento.
 
 ### Navegação
 
-A aplicação atualmente possui **1 rota ativa**:
+A aplicação atualmente possui **2 rotas ativas**:
 
 | Rota | Caminho | Componente | Descrição |
 |---|---|---|---|
-| **Home / Posts** | `/` | [PostList](src/pages/PostList/PostList.tsx) | Listagem paginada de todos os posts com busca |
+| **Home / Posts** | `/` | [PostList](src/pages/PostList/PostList.tsx) | Listagem paginada de todos os posts com busca e preview truncado |
+| **Detalhe do Post** | `/posts/:id` | [PostDetail](src/pages/PostDetail/PostDetail.tsx) | Visualização expandida do conteúdo completo com navegação de volta |
 
-A navegação ocorre pelo cabeçalho fixo ([Header](src/components/Header/Header.tsx)) com o link ativo destacado visualmente.
+A navegação ocorre pelo cabeçalho fixo ([Header](src/components/Header/Header.tsx)) com o link ativo destacado visualmente, e também clicando nos cards da listagem.
 
 ### Funcionalidade Principal: Listagem de Posts
 
 1. **Carregamento inicial**: Ao abrir a página, a aplicação faz `GET /posts?page=1&limit=10` automaticamente
 2. **Busca**: Digite no campo de busca para pesquisar por **título ou conteúdo** com debounce de 400ms → `GET /posts/search?search=termo`
 3. **Paginação**: Use os botões no rodapé da lista para navegar entre as páginas (mostra 1ª, última e vizinhas com `...`)
-4. **Estados visuais**:
+4. **Abrir detalhe**: Clique em qualquer card da lista para navegar até `/posts/:id` e visualizar o conteúdo completo
+5. **Estados visuais**:
    - 🌀 **Carregando**: Spinner animado
    - ⚠️ **Erro**: Mensagem explicativa + botão "Tentar novamente"
    - 📝 **Vazio**: Ícone + mensagem amigável
    - 🔍 **Busca sem resultados**: Mensagem específica
+
+### Funcionalidade: Detalhe do Post (Visualização Expandida)
+
+A página de detalhe exibe o conteúdo completo de um post selecionado a partir da listagem.
+
+**Fluxo de navegação**:
+1. Usuário clica em um card da listagem (ou acessa diretamente a URL `/posts/:id`)
+2. React Router extrai o parâmetro `:id` via `useParams`
+3. Aplicação executa `GET /posts/:id` com autenticação Bearer do aluno
+4. Com base na resposta, um dos estados é exibido:
+
+**Estados tratados na página de detalhe**:
+
+| Estado | Condição | Apresentação |
+|---|---|---|
+| 🌀 **Carregando** | Requisição em andamento | Spinner + mensagem + botão voltar disponível |
+| ✅ **Sucesso (200 OK)** | Post encontrado | Título grande (5xl → 3xl responsivo) + data de publicação + badge de atualizado (quando houver) + conteúdo completo (font-size lg, line-height 1.8) + dois CTAs de voltar |
+| 🔍 **Não encontrado (404)** | Backend retorna status 404 | Tela dedicada: ícone, título "Post não encontrado", mensagem explicativa + dois CTAs de retorno |
+| ⚠️ **Erro genérico** | Falha de rede ou servidor | `ErrorState` com explicação e botão de retry |
+
+**Navegação de volta (dupla camada)**:
+- Botão compacto no topo: "← Voltar para posts" (usa `useNavigate('/')`)
+- Link maior no rodapé da página de sucesso: "← Voltar para a listagem de posts" (usa `Link` do React Router)
+- Também disponível no topo das telas de erro e 404
+
+> 💡 O conteúdo no card da listagem é limitado a **4 linhas** (CSS `-webkit-line-clamp: 4`) e exibe o indicativo "Ler mais →", orientando o usuário a clicar para expandir o post completo.
 
 ### Fluxo de Autenticação
 

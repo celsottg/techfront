@@ -1,7 +1,8 @@
 import styled from 'styled-components';
+import { Link } from 'react-router-dom';
 import type { Post } from '../../types';
 
-const Card = styled.article`
+const CardLink = styled(Link)`
   width: 100%;
   background: ${({ theme }) => theme.colors.background};
   border: 1px solid ${({ theme }) => theme.colors.border};
@@ -11,11 +12,14 @@ const Card = styled.article`
   display: flex;
   flex-direction: column;
   gap: ${({ theme }) => theme.spacing.md};
+  text-decoration: none;
+  color: inherit;
 
   &:hover {
     box-shadow: ${({ theme }) => theme.shadows.md};
     transform: translateY(-2px);
     border-color: ${({ theme }) => theme.colors.primaryBorder};
+    color: inherit;
   }
 
   @media (max-width: ${({ theme }) => theme.breakpoints.tablet}) {
@@ -40,6 +44,11 @@ const CardTitle = styled.h2`
   color: ${({ theme }) => theme.colors.textHighlight};
   margin: 0;
   line-height: 1.3;
+  transition: color 0.2s;
+
+  ${CardLink}:hover & {
+    color: ${({ theme }) => theme.colors.primary};
+  }
 
   @media (max-width: ${({ theme }) => theme.breakpoints.tablet}) {
     font-size: ${({ theme }) => theme.typography.fontSize.xl};
@@ -85,6 +94,10 @@ const CardContent = styled.div`
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
 
   p {
     margin-bottom: ${({ theme }) => theme.spacing.md};
@@ -97,6 +110,15 @@ const CardContent = styled.div`
   @media (prefers-color-scheme: dark) {
     color: ${({ theme }) => theme.colors.dark.text};
   }
+`;
+
+const ReadMore = styled.span`
+  font-size: ${({ theme }) => theme.typography.fontSize.sm};
+  font-weight: ${({ theme }) => theme.typography.fontWeight.medium};
+  color: ${({ theme }) => theme.colors.primary};
+  display: inline-flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.xs};
 `;
 
 const formatDate = (dateString?: string): string => {
@@ -126,7 +148,7 @@ function PostCard({ post }: PostCardProps) {
   const updated = isUpdated(post.data_publicacao, post.data_atualizacao);
 
   return (
-    <Card>
+    <CardLink to={`/posts/${post.id}`} aria-label={`Ler mais sobre ${post.titulo}`}>
       <CardHeader>
         <CardTitle>{post.titulo}</CardTitle>
         <CardMeta>
@@ -139,7 +161,10 @@ function PostCard({ post }: PostCardProps) {
       <CardContent>
         <p>{post.conteudo}</p>
       </CardContent>
-    </Card>
+      <ReadMore>
+        Ler mais →
+      </ReadMore>
+    </CardLink>
   );
 }
 
