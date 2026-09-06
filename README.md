@@ -281,7 +281,7 @@ VITE_PROFESSOR_TOKEN=professor-dev-token-change-me
 ### Passo 1: Clonar o repositório
 
 ```bash
-git clone <url-do-repositorio>
+git clone <https://github.com/celsottg/techfront>
 cd techfront
 ```
 
@@ -294,7 +294,7 @@ npm install
 ### Passo 3: Configurar e iniciar o Backend (obrigatório)
 
 ```bash
-# Na pasta do backend (ou neste mesmo projeto se estiver configurado)
+# Na pasta do backend
 docker compose up -d      # Sobe o PostgreSQL
 npm run start:dev         # Inicia a API na porta 3000
 ```
