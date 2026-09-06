@@ -36,25 +36,12 @@ const FooterText = styled.p`
   }
 `;
 
-const FooterLink = styled.a`
-  color: ${({ theme }) => theme.colors.primary};
-  font-weight: ${({ theme }) => theme.typography.fontWeight.medium};
-  text-decoration: none;
-
-  &:hover {
-    text-decoration: underline;
-  }
-`;
-
 function Footer() {
   return (
     <FooterContainer>
       <FooterContent>
         <FooterText>
-          &copy; {new Date().getFullYear()} TechFront. Desenvolvido com React + Vite.
-        </FooterText>
-        <FooterText>
-          Projeto de aprendizado em <FooterLink href="https://www.fiap.com.br/">FIAP</FooterLink>
+          &copy; 2026 TechFront - Tech Challenge FIAP - Celso Gonçalves
         </FooterText>
       </FooterContent>
     </FooterContainer>
