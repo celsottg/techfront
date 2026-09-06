@@ -91,7 +91,7 @@ techfront/
 | **API** | [api.ts](src/api.ts) | Duas instâncias Axios: `apiAluno` (leitura, token aluno) e `apiProfessor` (escrita, token professor), com `baseURL` via proxy e timeout |
 | **Estado** | [postReducer.ts](src/reducers/postReducer.ts) | Lógica pura de transformação de estado: `SET_POSTS`, `ADD_POST`, `UPDATE_POST`, `REMOVE_POST` |
 | **Tema** | [theme.ts](src/styles/theme.ts) | Design System completo (cores, tipografia, espaçamentos, breakpoints) + `GlobalStyles` |
-| **Estrutural** | `components/Header`, `components/MainContent`, `components/Footer` | Layout base da aplicação (esqueleto visual). Header inclui o botão "Novo Post" e o link "Área administrativa"; PostDetail é tela de leitura pura **sem botão de editar** (edição só na área administrativa) |
+| **Estrutural** | `components/Header`, `components/MainContent`, `components/Footer` | Layout base da aplicação (esqueleto visual). Header contém **apenas os links de navegação** ("Posts" + "Área administrativa") — nenhum botão de ação de escrita no Header; PostDetail é tela de leitura pura **sem botão de editar**. Toda gestão (Criar, Editar, Remover) está **centralizada exclusivamente na página `/admin`** |
 | **Feature** | `pages/PostList`, `pages/PostDetail`, `pages/PostCreate`, `pages/PostEdit`, `pages/AdminArea` | Lógica de negócio: listagem (fetch, busca, paginação), **detalhe (fetch por id, tela de leitura pura — botão editar NÃO existe aqui)**, criação (formulário, validações, datas automáticas), **edição (acessível SOMENTE na área administrativa, pré-carregamento por id, atualiza apenas data_atualizacao, submit com PUT)** e **administrativo** (lista todos posts só com título + editar + remover DELETE com confirmação — ponto ÚNICO de entrada para edição) |
 | **UI** | `components/PostCard`, `components/Button`, `Loading`, `ErrorState`, `EmptyState` | Componentes de apresentação reutilizáveis (Button: primary/secondary/sm/md/lg/loading/fullWidth) |
 | **Raiz** | [App.tsx](src/App.tsx) | Orquestrador: une layout estrutural + rotas do React Router (5 rotas com ordem correta de precedência) |
@@ -104,11 +104,11 @@ main.tsx
   ├── BrowserRouter (react-router-dom)    ← roteamento SPA
   └── App.tsx
         ├── Header (sticky top)
-        │     ├── Left: Logo + Nav
-        │     │       ├── Link "/" → "Posts" (ativo quando /)
-        │     │       └── Link "/admin" → "Área administrativa" (ativo quando /admin)
-        │     └── Right: Link "/posts/create" → Button "+ Novo Post"
-        │                                     (desktop: "Novo Post" texto, mobile: só ícone +)
+        │     └── Left: Logo + Nav
+        │           ├── Link "/" → "Posts" (ativo quando /)
+        │           └── Link "/admin" → "Área administrativa" (ativo quando /admin)
+        │     Obs: Header contém APENAS navegação (sem botões de ação).
+        │          Toda gestão (Criar / Editar / Remover posts) está centralizada em /admin.
         ├── MainContent
         │     └── Routes
         │           ├── "/" → PostList (page)
@@ -350,13 +350,17 @@ A aplicação atualmente possui **5 rotas ativas**:
 |---|---|---|---|
 | **Home / Posts** | `/` | [PostList](src/pages/PostList/PostList.tsx) | Listagem paginada de todos os posts com busca e preview truncado |
 | **Área Administrativa** | `/admin` | [AdminArea](src/pages/AdminArea/AdminArea.tsx) | Lista completa de todos os posts (só título + ID badge) com ações de Editar e Remover. Acessível pelo link "Área administrativa" no cabeçalho. **É o PONTO ÚNICO de acesso à edição de posts** |
-| **Criar Post** | `/posts/create` | [PostCreate](src/pages/PostCreate/PostCreate.tsx) | Formulário de criação de novo post (acessível pelo botão "Novo Post" no cabeçalho) |
+| **Criar Post** | `/posts/create` | [PostCreate](src/pages/PostCreate/PostCreate.tsx) | Formulário de criação de novo post (acessível **pelo botão "+ Novo Post" DENTRO da Área administrativa** — não existe mais no cabeçalho) |
 | **Editar Post** | `/posts/:id/edit` | [PostEdit](src/pages/PostEdit/PostEdit.tsx) | Formulário de edição de post existente com dados pré-carregados (acessível **SOMENTE** pelo botão "✏️ Editar" da área administrativa — não existe no detalhe do post) |
 | **Detalhe do Post** | `/posts/:id` | [PostDetail](src/pages/PostDetail/PostDetail.tsx) | Visualização expandida do conteúdo completo (leitura pura) com navegação de volta. **Não possui botão de editar** |
 
 > ⚠️ **Ordem das rotas no roteador**: Em [App.tsx](src/App.tsx) a rota `/admin` e as rotas literais `/posts/create` e `/posts/:id/edit` são **sempre declaradas antes** da rota curinga `/posts/:id`, para evitar que as palavras sejam interpretadas como IDs dinâmicos. A ordem correta é: 1. `/` → 2. `/admin` → 3. `/posts/create` → 4. `/posts/:id/edit` → 5. `/posts/:id`.
 
-A navegação ocorre pelo cabeçalho fixo ([Header](src/components/Header/Header.tsx)) com dois links ativos destacados ("Posts" (leitura) e "Área administrativa" (gestão)) + botão **"+ Novo Post"** (acessa a tela de criação), clicando nos cards da listagem (abre detalhe — só leitura), clicando no título na área administrativa (abre detalhe — só leitura), e também pelos botões **"✏️ Editar"** (abre tela de edição, SOMENTE NA ÁREA ADMINISTRATIVA) e **"🗑️ Remover"** (executa exclusão na área administrativa).
+A navegação ocorre pelo cabeçalho fixo ([Header](src/components/Header/Header.tsx)) contendo **apenas 2 links de navegação** ativos destacados: **"Posts"** (listagem pública, leitura) e **"Área administrativa"** (gestão). O Header **não contém mais nenhum botão de ação de escrita** — **toda gestão (Criar, Editar, Remover posts)** está **100% centralizada na página `/admin`**:
+- **Criar post**: botão "+ Novo Post" no topo da Área administrativa
+- **Editar post**: botão "✏️ Editar" em cada linha da Área administrativa
+- **Remover post**: botão "🗑️ Remover" em cada linha da Área administrativa
+- **Abrir detalhe**: clicando nos cards da listagem ou clicando no título na área administrativa (leitura pura)
 
 ### Funcionalidade Principal: Listagem de Posts
 
@@ -364,10 +368,11 @@ A navegação ocorre pelo cabeçalho fixo ([Header](src/components/Header/Header
 2. **Busca**: Digite no campo de busca para pesquisar por **título ou conteúdo** com debounce de 400ms → `GET /posts/search?search=termo`
 3. **Paginação**: Use os botões no rodapé da lista para navegar entre as páginas (mostra 1ª, última e vizinhas com `...`)
 4. **Abrir detalhe**: Clique em qualquer card da lista para navegar até `/posts/:id` e visualizar o conteúdo completo
-5. **Criar novo post**: Clique no botão **"+" / "Novo Post"** no canto superior direito do cabeçalho para abrir `/posts/create`
-6. **Área administrativa**: Clique no link **"Área administrativa"** no menu do cabeçalho para acessar `/admin` e gerenciar todos os posts (lista com editar e remover)
-7. **Editar post existente**: Na tela de **Área administrativa** (`/admin`), localize o post que deseja editar e clique no botão **"✏️ Editar"** (único ponto de entrada para edição — a tela de detalhe do post é só leitura)
-8. **Estados visuais**:
+5. **Área administrativa (ponto único de gestão)**: Clique no link **"Área administrativa"** no menu do cabeçalho para acessar `/admin` e executar **todas as operações de escrita**:
+   - ✅ **Criar novo post**: botão **"+ Novo Post"** no topo da lista
+   - ✅ **Editar post existente**: botão **"✏️ Editar"** na linha do post (único ponto de entrada para edição)
+   - ✅ **Remover post**: botão **"🗑️ Remover"** na linha do post (confirmação em 2 passos)
+6. **Estados visuais**:
    - 🌀 **Carregando**: Spinner animado
    - ⚠️ **Erro**: Mensagem explicativa + botão "Tentar novamente"
    - 📝 **Vazio**: Ícone + mensagem amigável
@@ -406,10 +411,9 @@ A página de detalhe exibe o conteúdo completo de um post selecionado a partir 
 A página de criação permite que um usuário com **perfil de professor** publique novos conteúdos no blog.
 
 #### Acesso
-- Botão **"+ Novo Post"** fixo no canto superior direito do cabeçalho ([Header.tsx](src/components/Header/Header.tsx#L122-L127))
-  - Desktop (≥769px): Exibe o texto completo `"Novo Post"`
-  - Mobile/tablet (≤768px): Exibe apenas o ícone `+` (compacto, sem texto)
-- Atalho direto via URL `/posts/create`
+- **Acesso exclusivo via Área administrativa**: na tela `/admin`, no topo da lista (ao lado de "N posts no total"), clique no botão **"+ Novo Post"** ([AdminArea.tsx](src/pages/AdminArea/AdminArea.tsx#L505-L508))
+  - O Header principal **não contém mais o botão "Novo Post"** — toda gestão de conteúdo está centralizada na rota `/admin`
+- Atalho direto via URL `/posts/create` (ainda funcional para atalho direto, mas o ponto recomendado de acesso é a Área administrativa)
 
 #### Campos visíveis para o usuário
 Apenas **dois campos** são exibidos no formulário, ambos obrigatórios:
