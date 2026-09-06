@@ -251,6 +251,14 @@ main.tsx
 - ✅ **Estado local** (`useState`) para controle de UI (busca, página)
 - ✅ **Reducer** (`postReducer`) preparado para estado global (useReducer / Context API)
 
+### Testes Unitários
+- ✅ **Stack Vitest + Testing Library** (padrão moderno React + Vite, 100% compatível Jest API)
+- ✅ **Ambiente jsdom** para DOM simulado (Styled Components, React Router)
+- ✅ **Mocks de API determinísticos** (`vi.mock('../../api')` + `vi.fn()` — testes NÃO dependem do backend rodando)
+- ✅ **42 testes cobrindo Componentes + Páginas**: 7 componentes UI + 4 páginas core (Detalhe, Criar, Editar, AdminArea)
+- ✅ **Regras de negócio como testes**: PUT payload NÃO envia data_publicacao; POST envia AMBAS datas; Header sem botão gestão; Detalhe sem editar; DELETE 2-passos
+- ✅ **Helper customizado**: `render()` com ThemeProvider + MemoryRouter + `renderPage()` para telas com `useParams()`
+
 ---
 
 ## 📋 Pré-requisitos
@@ -295,6 +303,10 @@ npm install
 
 ```bash
 # Na pasta do backend
+git clone <https://github.com/celsottg/techchallenge>
+cd techchallenge
+cp .env.example .env
+npm install
 docker compose up -d      # Sobe o PostgreSQL
 npm run start:dev         # Inicia a API na porta 3000
 ```
@@ -316,7 +328,7 @@ A aplicação estará disponível em **http://localhost:5173**
 
 ## 📜 Scripts Disponíveis
 
-Todos os scripts são definidos em [package.json](package.json#L6-L12):
+Todos os scripts são definidos em [package.json](package.json#L6-L15):
 
 | Script | Comando | Descrição |
 |---|---|---|
@@ -325,6 +337,9 @@ Todos os scripts são definidos em [package.json](package.json#L6-L12):
 | `npm run type-check` | `tsc --noEmit` | Verifica tipos TypeScript **sem gerar arquivos** |
 | `npm run lint` | `eslint .` | Analisa código em busca de problemas de estilo e qualidade |
 | `npm run preview` | `vite preview` | Serve o build de produção localmente para validação |
+| `npm run test` | `vitest run` | **Executa toda a suíte de testes unitários uma única vez** (terminal, sem watch) |
+| `npm run test:watch` | `vitest` | Modo interativo — reexecuta testes automaticamente ao salvar arquivos |
+| `npm run test:coverage` | `vitest run --coverage` | Executa testes + gera **relatório de cobertura** em `coverage/index.html` |
 
 ### Detalhe do Proxy de API
 
@@ -337,6 +352,71 @@ Requisição ao backend: GET http://localhost:3000/posts?page=1
 ```
 
 Isso evita problemas de **CORS** durante o desenvolvimento.
+
+---
+
+## 🧪 Testes Unitários
+
+Os testes unitários são implementados com o ecossistema **Vitest** (completamente integrado ao Vite, rápido e compatível 100% com Jest) + **Testing Library**, seguindo as boas práticas de testar o componente do ponto de vista do usuário, não detalhes de implementação.
+
+### Stack de testes adotada
+| Ferramenta | Versão | Finalidade |
+|---|---|---|
+| **Vitest** | ^5 | Executor de testes nativo do ecossistema Vite (API compatível com Jest) |
+| **jsdom** | latest | Browser DOM simulado para testes de componentes React |
+| **@testing-library/react** | latest | `render()`, queries (`getByRole`, `findByText`, `getAllBy...`) e utilitários |
+| **@testing-library/jest-dom** | latest | Matchers extras (`.toBeInTheDocument()`, `.toHaveAttribute()`, etc) |
+| **@testing-library/user-event** | latest | Simula eventos de usuário real (digitação, cliques, blur, clear) |
+| **@vitest/coverage-v8** | latest | Relatórios de cobertura (formato `text` + `html` + `lcov`) |
+
+### Estrutura de arquivos de teste
+
+Os testes ficam localizados **ao lado** dos arquivos testados com a extensão `*.test.tsx` (padrão Testing Library):
+
+```
+src/
+├── api.ts                             ← MOCKADO (vi.mock) nos testes de páginas
+├── test/                              ← Setup global e helpers
+│   ├── setup.ts                       ← jest-dom + mocks de matchMedia / IntersectionObserver
+│   └── test-utils.tsx                 ← render() customizado + renderPage() + userEvent
+├── components/
+│   ├── Button/Button.test.tsx         ← 6 testes: variantes, loading, disabled, onClick, submit, a11y
+│   ├── Footer/Footer.test.tsx         ← 3 testes: mensagem fixa 2026, 1 linha, sem links
+│   ├── Header/Header.test.tsx         ← 5 testes: logo, links Posts + Área admin, SEM botão Novo Post
+│   ├── Loading/Loading.test.tsx       ← 2 testes: mensagem padrão e mensagem customizada
+│   ├── EmptyState/EmptyState.test.tsx ← 3 testes: defaults, props customizadas, s/ botão
+│   ├── ErrorState/ErrorState.test.tsx ← 4 testes: título padrão, msg customizada, onRetry e s/ retry
+│   └── PostCard/PostCard.test.tsx     ← 5 testes: título, Link /posts/:id, badge Atualizado
+└── pages/
+    ├── PostDetail/PostDetail.test.tsx ← 5 testes: loading, sucesso, GET :id, 404, SEM botão Editar
+    ├── PostCreate/PostCreate.test.tsx ← 3 testes: campos, validação vazio, POST payload AMBAS datas
+    ├── PostEdit/PostEdit.test.tsx     ← 2 testes: preload popula campos, PUT SÓ data_atualizacao ⭐
+    └── AdminArea/AdminArea.test.tsx   ← 4 testes: Novo Post, listagem IDs/actions, contador, DELETE 2-passos
+```
+
+#### Destaques dos testes de regras de negócio (CRÍTICOS):
+| Teste | Local | O que valida |
+|---|---|---|
+| **POST payload tem AS DUAS datas automáticas** | `PostCreate.test.tsx` | `data_publicacao` + `data_atualizacao` enviadas no body do POST |
+| **PUT payload NÃO envia `data_publicacao`** ⭐ | `PostEdit.test.tsx` | PUT `/posts/:id` contém `data_atualizacao` mas **NÃO tem `data_publicacao`** (preservado backend) |
+| **Tela detalhe SEM botão Editar** | `PostDetail.test.tsx` | Assegura isolamento de edição apenas via Área administrativa |
+| **Header SEM botão Novo Post** | `Header.test.tsx` | Assegura gestão centralizada em `/admin` (Criar/Editar/Remover só lá) |
+| **DELETE 2 passos no AdminArea** | `AdminArea.test.tsx` | Remover → Cancelar/Confirmar → DELETE 204 → item removido + contador atualizado |
+
+### Como executar
+
+```bash
+# 1. Rodar todos os testes UMA VEZ (saída final com resumo: 42/42 passed)
+npm run test
+
+# 2. Modo interativo WATCH (reexecuta ao salvar arquivos alterados)
+npm run test:watch
+
+# 3. Rodar + gerar relatório COBERTURA em HTML (abrir coverage/index.html no browser)
+npm run test:coverage
+```
+
+> 💡 **Os testes de páginas usam `vi.mock('../../api')`** para simular as chamadas Axios — portanto **NÃO dependem** do backend/postgres estar rodando. Tudo é mockado de forma isolada e determinística (conforme recomendado pela documentação da FIAP no README_backend).
 
 ---
 

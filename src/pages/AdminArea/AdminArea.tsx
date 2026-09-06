@@ -378,10 +378,8 @@ function AdminArea() {
     return (
       <PageWrapper>
         <ErrorState
-          title="Erro ao carregar a área administrativa"
-          message={error}
+          message={`Erro ao carregar a área administrativa: ${error}`}
           onRetry={fetchAllPosts}
-          retryLabel="Tentar novamente"
         />
       </PageWrapper>
     );

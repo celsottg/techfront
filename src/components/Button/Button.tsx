@@ -1,5 +1,5 @@
 import styled, { css } from 'styled-components';
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, ElementType, ReactNode } from 'react';
 
 type ButtonVariant = 'primary' | 'secondary';
 type ButtonSize = 'sm' | 'md' | 'lg';
@@ -129,6 +129,8 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
   fullWidth?: boolean;
   children: ReactNode;
+  as?: ElementType;
+  to?: string;
 }
 
 function Button({
@@ -139,17 +141,22 @@ function Button({
   children,
   disabled,
   type = 'button',
+  as,
+  to,
   ...rest
 }: ButtonProps) {
+  const polymorphicProps = as ? { as, to } : {};
+
   return (
     <StyledButton
+      {...polymorphicProps}
       $variant={variant}
       $size={size}
       $loading={loading}
       $fullWidth={fullWidth}
       $disabled={disabled}
       disabled={disabled || loading}
-      type={type}
+      type={as ? undefined : type}
       {...rest}
     >
       {loading && <Spinner aria-hidden="true" />}
