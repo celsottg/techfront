@@ -14,8 +14,10 @@ Funcionalidades ativas:
 - ✅ Visualização detalhada de post (conteúdo expandido)
 - ✅ Criação de novos posts por perfil de professor
 - ✅ Edição de posts existentes (atualiza apenas `data_atualizacao`)
+- ✅ **Área administrativa** com lista completa de posts (só título) para gerenciar conteúdo
+- ✅ **Exclusão de posts** (DELETE `/posts/:id`) com confirmação, apenas por perfil professor
 - ✅ Estados completos (loading, erro, vazio, 404, validação, 401/403)
-- ✅ Navegação SPA entre listagem, detalhe, criação e edição de posts
+- ✅ Navegação SPA entre listagem, detalhe, criação, edição e área administrativa
 
 ---
 
@@ -56,8 +58,10 @@ techfront/
 │   │   │   └── PostDetail.tsx
 │   │   ├── PostCreate/                # Formulário de criação de novo post
 │   │   │   └── PostCreate.tsx
-│   │   └── PostEdit/                  # Formulário de edição de post existente
-│   │       └── PostEdit.tsx
+│   │   ├── PostEdit/                  # Formulário de edição de post existente
+│   │   │   └── PostEdit.tsx
+│   │   └── AdminArea/                 # Área administrativa: lista todos os posts (só título) com editar/remover
+│   │       └── AdminArea.tsx
 │   │
 │   ├── reducers/                      # Funções puras (useReducer pattern)
 │   │   └── postReducer.ts             # Redutor para operações CRUD de posts
@@ -87,10 +91,10 @@ techfront/
 | **API** | [api.ts](src/api.ts) | Duas instâncias Axios: `apiAluno` (leitura, token aluno) e `apiProfessor` (escrita, token professor), com `baseURL` via proxy e timeout |
 | **Estado** | [postReducer.ts](src/reducers/postReducer.ts) | Lógica pura de transformação de estado: `SET_POSTS`, `ADD_POST`, `UPDATE_POST`, `REMOVE_POST` |
 | **Tema** | [theme.ts](src/styles/theme.ts) | Design System completo (cores, tipografia, espaçamentos, breakpoints) + `GlobalStyles` |
-| **Estrutural** | `components/Header`, `components/MainContent`, `components/Footer` | Layout base da aplicação (esqueleto visual). Header inclui o botão "Novo Post"; PostDetail inclui o botão "Editar" |
-| **Feature** | `pages/PostList`, `pages/PostDetail`, `pages/PostCreate`, `pages/PostEdit` | Lógica de negócio: listagem (fetch, busca, paginação), detalhe (fetch por id + botão editar), criação (formulário, validações, datas automáticas) e edição (pré-carregamento por id, atualiza apenas data_atualizacao, submit com PUT) |
+| **Estrutural** | `components/Header`, `components/MainContent`, `components/Footer` | Layout base da aplicação (esqueleto visual). Header inclui o botão "Novo Post" e o link "Área administrativa"; PostDetail é tela de leitura pura **sem botão de editar** (edição só na área administrativa) |
+| **Feature** | `pages/PostList`, `pages/PostDetail`, `pages/PostCreate`, `pages/PostEdit`, `pages/AdminArea` | Lógica de negócio: listagem (fetch, busca, paginação), **detalhe (fetch por id, tela de leitura pura — botão editar NÃO existe aqui)**, criação (formulário, validações, datas automáticas), **edição (acessível SOMENTE na área administrativa, pré-carregamento por id, atualiza apenas data_atualizacao, submit com PUT)** e **administrativo** (lista todos posts só com título + editar + remover DELETE com confirmação — ponto ÚNICO de entrada para edição) |
 | **UI** | `components/PostCard`, `components/Button`, `Loading`, `ErrorState`, `EmptyState` | Componentes de apresentação reutilizáveis (Button: primary/secondary/sm/md/lg/loading/fullWidth) |
-| **Raiz** | [App.tsx](src/App.tsx) | Orquestrador: une layout estrutural + rotas do React Router (4 rotas com ordem correta de precedência) |
+| **Raiz** | [App.tsx](src/App.tsx) | Orquestrador: une layout estrutural + rotas do React Router (5 rotas com ordem correta de precedência) |
 
 ### Fluxo de Dados (Data Flow)
 
@@ -100,7 +104,9 @@ main.tsx
   ├── BrowserRouter (react-router-dom)    ← roteamento SPA
   └── App.tsx
         ├── Header (sticky top)
-        │     ├── Left: Logo + Nav (Link para /)
+        │     ├── Left: Logo + Nav
+        │     │       ├── Link "/" → "Posts" (ativo quando /)
+        │     │       └── Link "/admin" → "Área administrativa" (ativo quando /admin)
         │     └── Right: Link "/posts/create" → Button "+ Novo Post"
         │                                     (desktop: "Novo Post" texto, mobile: só ícone +)
         ├── MainContent
@@ -114,6 +120,26 @@ main.tsx
         │           │           ├── ErrorState (retry)
         │           │           ├── EmptyState
         │           │           └── PostsGrid com PostCard[] (Links para /posts/:id) + Paginação
+        │           │
+        │           ├── "/admin" → AdminArea (page)
+        │           │     ├── useState: posts[], loading, error, successMessage, operationError
+        │           │     ├── useState: deletingId (loading por item) + confirmDeleteId (2-step confirmação)
+        │           │     ├── useCallback fetchAllPosts → apiAluno.get('/posts?page=X&limit=50') paginado até obter TODOS
+        │           │     ├── useEffect → executa fetchAllPosts no mount
+        │           │     ├── Botão Editar por item → Link "/posts/${id}/edit"
+        │           │     ├── Botão Remover por item:
+        │           │     │     ├── Click 1: mostra estado "Confirmar Exclusão" (destructive) + Cancelar
+        │           │     │     ├── Click 2 Confirmar → apiProfessor.delete(`/posts/${id}`)
+        │           │     │     │     ├── retorno 204 No Content → remove item da lista local + banner sucesso
+        │           │     │     │     └── erros: 401/403/404/5xx tratados em ErrorBanner contextualizado
+        │           │     │     └── Loading inline no botão ("Removendo...")
+        │           │     └── renderiza:
+        │           │           ├── PageHeader "Área administrativa" + subtítulo
+        │           │           ├── SuccessBanner (toast inline: "Post X foi removido com sucesso.")
+        │           │           ├── ErrorBanner (operacao DELETE 401/403/404/5xx)
+        │           │           ├── EmptyState (0 posts)
+        │           │           └── PostListContainer (UL/LI lista simples):
+        │           │                 └── Por item: [Badge #ID] [Título clicável → detalhe] [Ações: ✏️ Editar | 🗑️ Remover]
         │           │
         │           ├── "/posts/create" → PostCreate (page)  ← rota ANTES de /posts/:id
         │           │     ├── useState: titulo, conteudo, errors, touched, loading, submitError
@@ -160,8 +186,6 @@ main.tsx
         │                 ├── useState: post, loading, error, notFound
         │                 ├── useCallback + useEffect → apiAluno.get(`/posts/${id}`)
         │                 ├── axios → proxy vite → backend localhost:3000
-        │                 ├── Botão "✏️ Editar" no PostHeader (canto superior direito do post)
-        │                 │     └── Link para `/posts/${id}/edit`
         │                 └── renderiza:
         │                       ├── BackButton (botão voltar)
         │                       ├── Loading (spinner)
@@ -190,20 +214,23 @@ main.tsx
 ## ✅ Padrões e Boas Práticas Adotados
 
 ### Integração com Back-End
-- ✅ **CRUD iniciado** (implementado: GET listagem, busca, detalhe por id, **POST /posts** criação e **PUT /posts/:id** edição)
-- ✅ **Dois perfis de autenticação separados**: `apiAluno` (leitura) e `apiProfessor` (escrita, permissão POST/PUT/DELETE na API)
+- ✅ **CRUD COMPLETO implementado**: GET (listagem / busca / detalhe), **POST /posts** (criação), **PUT /posts/:id** (edição) e **DELETE /posts/:id** (exclusão, retorno 204 No Content)
+- ✅ **Dois perfis de autenticação separados**: `apiAluno` (leitura apenas: GETs) e `apiProfessor` (leitura + escrita completa: POST/PUT/DELETE)
 - ✅ **Datas automáticas no envio** (transparente para o usuário):
   - **Criação (POST)**: `data_publicacao` e `data_atualizacao` são ambas geradas como `new Date().toISOString()` no momento do submit
   - **Edição (PUT)**: **APENAS `data_atualizacao`** é enviada no payload (gerada automaticamente no submit); o campo `data_publicacao` **NÃO é enviado** (preservado 100% no backend)
-- ✅ **Estados visuais completos**: loading, sucesso, erro (com retry), empty, **404**, **validação cliente side**, **401 (auth)** e **403 (perfil sem permissão)** com mensagens contextuais
-- ✅ **Paginação** no servidor (10 itens por página)
+  - **Exclusão (DELETE)**: sem payload; retorno esperado `204 No Content`
+- ✅ **Estados visuais completos**: loading, sucesso, erro (com retry), empty, **404**, **validação cliente side**, **401 (auth)** e **403 (perfil sem permissão)** com mensagens contextuais. Na exclusão: **banner de sucesso** após DELETE concluído e **confirmação em 2 passos** (clicar Remover → confirmar exclusão)
+- ✅ **Paginação** no servidor (10 itens por página na listagem pública; AdminArea usa paginação 50 em loop até obter todos os posts)
 - ✅ **Busca com debounce** (400ms) via endpoint `/posts/search`
-- ✅ **Detalhe por ID** via endpoint `/posts/:id` com tratamento de 404 e botão "✏️ Editar" no cabeçalho
+- ✅ **Detalhe por ID** via endpoint `/posts/:id` com tratamento de 404 (**tela de leitura pura, sem ações de edição** — edição disponível apenas na área administrativa)
 - ✅ **Criação via POST /posts** usando token de professor, payload com `titulo`, `conteudo` + datas automáticas, e redirect para `/posts/:id` do post recém-criado no sucesso
 - ✅ **Edição via PUT /posts/:id** usando token de professor, pré-carregamento do post, payload com `titulo`, `conteudo` + apenas `data_atualizacao`, e redirect para detalhe no sucesso
+- ✅ **Exclusão via DELETE /posts/:id** (AdminArea ou ações individuais) usando token de professor, com confirmação de 2 passos, estados loading por item (evita duplo clique), tratamento 401/403/404/5xx contextualizado e remoção imediata do item da lista após 204
+- ✅ **Área administrativa** (`/admin`): lista completa todos os posts em formato linha-a-linha (só título + ID badge) com ações diretas Editar / Remover; acessível pelo link "Área administrativa" no Header
 - ✅ **Axios configurado** com proxy Vite (evita CORS em desenvolvimento)
 - ✅ **Autenticação Bearer token** (perfil aluno para leitura, perfil professor para escrita)
-- ✅ **Navegação SPA** via React Router DOM (listagem ↔ detalhe ↔ criação ↔ edição, sem recarregar página)
+- ✅ **Navegação SPA** via React Router DOM (listagem ↔ detalhe ↔ criação ↔ edição ↔ área administrativa, sem recarregar página)
 - ✅ **Preview truncado no card** (4 linhas) com indicativo "Ler mais →"
 - ✅ **Botão reutilizável**: `components/Button` com variantes `primary/secondary`, tamanhos `sm/md/lg`, estado `loading` com spinner inline e suporte a `fullWidth`
 
@@ -317,18 +344,19 @@ Isso evita problemas de **CORS** durante o desenvolvimento.
 
 ### Navegação
 
-A aplicação atualmente possui **4 rotas ativas**:
+A aplicação atualmente possui **5 rotas ativas**:
 
 | Rota | Caminho | Componente | Descrição |
 |---|---|---|---|
 | **Home / Posts** | `/` | [PostList](src/pages/PostList/PostList.tsx) | Listagem paginada de todos os posts com busca e preview truncado |
+| **Área Administrativa** | `/admin` | [AdminArea](src/pages/AdminArea/AdminArea.tsx) | Lista completa de todos os posts (só título + ID badge) com ações de Editar e Remover. Acessível pelo link "Área administrativa" no cabeçalho. **É o PONTO ÚNICO de acesso à edição de posts** |
 | **Criar Post** | `/posts/create` | [PostCreate](src/pages/PostCreate/PostCreate.tsx) | Formulário de criação de novo post (acessível pelo botão "Novo Post" no cabeçalho) |
-| **Editar Post** | `/posts/:id/edit` | [PostEdit](src/pages/PostEdit/PostEdit.tsx) | Formulário de edição de post existente com dados pré-carregados (acessível pelo botão "✏️ Editar" na página de detalhe) |
-| **Detalhe do Post** | `/posts/:id` | [PostDetail](src/pages/PostDetail/PostDetail.tsx) | Visualização expandida do conteúdo completo com navegação de volta e botão de editar |
+| **Editar Post** | `/posts/:id/edit` | [PostEdit](src/pages/PostEdit/PostEdit.tsx) | Formulário de edição de post existente com dados pré-carregados (acessível **SOMENTE** pelo botão "✏️ Editar" da área administrativa — não existe no detalhe do post) |
+| **Detalhe do Post** | `/posts/:id` | [PostDetail](src/pages/PostDetail/PostDetail.tsx) | Visualização expandida do conteúdo completo (leitura pura) com navegação de volta. **Não possui botão de editar** |
 
-> ⚠️ **Ordem das rotas no roteador**: Em [App.tsx](src/App.tsx) as rotas literais `/posts/create` e `/posts/:id/edit` são **sempre declaradas antes** da rota curinga `/posts/:id`, para evitar que as palavras literais `create` e `edit` sejam interpretadas como IDs dinâmicos. A ordem correta é: 1. `/` → 2. `/posts/create` → 3. `/posts/:id/edit` → 4. `/posts/:id`.
+> ⚠️ **Ordem das rotas no roteador**: Em [App.tsx](src/App.tsx) a rota `/admin` e as rotas literais `/posts/create` e `/posts/:id/edit` são **sempre declaradas antes** da rota curinga `/posts/:id`, para evitar que as palavras sejam interpretadas como IDs dinâmicos. A ordem correta é: 1. `/` → 2. `/admin` → 3. `/posts/create` → 4. `/posts/:id/edit` → 5. `/posts/:id`.
 
-A navegação ocorre pelo cabeçalho fixo ([Header](src/components/Header/Header.tsx)) com link ativo destacado, botão **"+ Novo Post"** (acessa a tela de criação), clicando nos cards da listagem (abre detalhe), e também pelo botão **"✏️ Editar"** no cabeçalho do post detalhado (abre tela de edição).
+A navegação ocorre pelo cabeçalho fixo ([Header](src/components/Header/Header.tsx)) com dois links ativos destacados ("Posts" (leitura) e "Área administrativa" (gestão)) + botão **"+ Novo Post"** (acessa a tela de criação), clicando nos cards da listagem (abre detalhe — só leitura), clicando no título na área administrativa (abre detalhe — só leitura), e também pelos botões **"✏️ Editar"** (abre tela de edição, SOMENTE NA ÁREA ADMINISTRATIVA) e **"🗑️ Remover"** (executa exclusão na área administrativa).
 
 ### Funcionalidade Principal: Listagem de Posts
 
@@ -337,8 +365,9 @@ A navegação ocorre pelo cabeçalho fixo ([Header](src/components/Header/Header
 3. **Paginação**: Use os botões no rodapé da lista para navegar entre as páginas (mostra 1ª, última e vizinhas com `...`)
 4. **Abrir detalhe**: Clique em qualquer card da lista para navegar até `/posts/:id` e visualizar o conteúdo completo
 5. **Criar novo post**: Clique no botão **"+" / "Novo Post"** no canto superior direito do cabeçalho para abrir `/posts/create`
-6. **Editar post existente**: Ao visualizar o detalhe do post, use o botão **"✏️ Editar"** no canto superior direito do cabeçalho do próprio post
-7. **Estados visuais**:
+6. **Área administrativa**: Clique no link **"Área administrativa"** no menu do cabeçalho para acessar `/admin` e gerenciar todos os posts (lista com editar e remover)
+7. **Editar post existente**: Na tela de **Área administrativa** (`/admin`), localize o post que deseja editar e clique no botão **"✏️ Editar"** (único ponto de entrada para edição — a tela de detalhe do post é só leitura)
+8. **Estados visuais**:
    - 🌀 **Carregando**: Spinner animado
    - ⚠️ **Erro**: Mensagem explicativa + botão "Tentar novamente"
    - 📝 **Vazio**: Ícone + mensagem amigável
@@ -359,20 +388,16 @@ A página de detalhe exibe o conteúdo completo de um post selecionado a partir 
 | Estado | Condição | Apresentação |
 |---|---|---|
 | 🌀 **Carregando** | Requisição em andamento | Spinner + mensagem + botão voltar disponível |
-| ✅ **Sucesso (200 OK)** | Post encontrado | Título grande (5xl → 3xl responsivo) + **botão "✏️ Editar"** no canto superior direito do cabeçalho + data de publicação + badge de atualizado (quando houver) + conteúdo completo (font-size lg, line-height 1.8) + dois CTAs de voltar |
+| ✅ **Sucesso (200 OK)** | Post encontrado | Título grande (5xl → 3xl responsivo) + data de publicação + badge de atualizado (quando houver) + conteúdo completo (font-size lg, line-height 1.8) + dois CTAs de voltar. **Tela de leitura pura — não há botão de editar aqui** |
 | 🔍 **Não encontrado (404)** | Backend retorna status 404 | Tela dedicada: ícone, título "Post não encontrado", mensagem explicativa + dois CTAs de retorno |
 | ⚠️ **Erro genérico** | Falha de rede ou servidor | `ErrorState` com explicação e botão de retry |
-
-**Botão "✏️ Editar" (cabeçalho do post)**:
-- Posição: canto superior direito do cabeçalho do post, lado do título
-- Estilo: botão `secondary` tamanho `sm` (subtil, não compete com o conteúdo)
-- Comportamento: ao clicar, navega para a rota `/posts/:id/edit` abrindo a tela de edição com os dados já pré-carregados do post
-- Acessibilidade: `aria-label` dinâmico com o título do post para leitores de tela
 
 **Navegação de volta (dupla camada)**:
 - Botão compacto no topo: "← Voltar para posts" (usa `useNavigate('/')`)
 - Link maior no rodapé da página de sucesso: "← Voltar para a listagem de posts" (usa `Link` do React Router)
 - Também disponível no topo das telas de erro e 404
+
+> ⚠️ **Regra de permissão**: A página de detalhe do post (`/posts/:id`) é **exclusivamente de leitura**. Para **editar** um post, utilize a **Área administrativa** (`/admin`) — ponto único de entrada para a edição.
 
 > 💡 O conteúdo no card da listagem é limitado a **4 linhas** (CSS `-webkit-line-clamp: 4`) e exibe o indicativo "Ler mais →", orientando o usuário a clicar para expandir o post completo.
 
@@ -435,7 +460,8 @@ Apenas **dois campos** são exibidos no formulário, ambos obrigatórios:
 A página de edição permite que um usuário com **perfil de professor** atualize o título e/ou conteúdo de um post já publicado. A **data de publicação original é preservada em 100%** — apenas a **data de atualização** é automaticamente alterada no submit.
 
 #### Acesso
-- Botão **"✏️ Editar"** no canto superior direito do cabeçalho do post, dentro da página de detalhe ([PostDetail.tsx](src/pages/PostDetail/PostDetail.tsx#L338-L362))
+- **Acesso exclusivo via Área administrativa**: na tela `/admin`, na linha do post que deseja editar, clique no botão **"✏️ Editar"** ([AdminArea.tsx](src/pages/AdminArea/AdminArea.tsx#L540-L545))
+  - A página de detalhe do post (`/posts/:id`) é de **leitura pura** e não possui mais o botão de editar (para isolar as operações de escrita na área administrativa)
 - Atalho direto via URL `/posts/:id/edit` (requer que o `:id` seja de um post existente)
 
 #### Pré-carregamento automático
@@ -492,6 +518,75 @@ A página de edição possui **dois loadings independentes** (separados por sem�
 | ⚠️ **403 Forbidden** fetch ou submit | Token de **aluno** foi usado ao invés de professor | Banner contextualizado: *"Edição de posts é exclusiva para o perfil de professor. Verifique o token configurado em api.ts."* |
 | ⚠️ **5xx Servidor** fetch ou submit | Erro interno (banco, etc.) | Mensagem amigável para tentar novamente mais tarde (no fetch: retry disponível; no submit: erro inline acima do formulário) |
 
+### Funcionalidade: Área Administrativa (Gerenciar Posts)
+
+A página da área administrativa (`/admin`) fornece uma visão consolidada de **todos os posts publicados** em uma lista limpa contendo apenas o título do post, seu ID, e ações diretas de Editar e Remover. Esta página é o local ideal para o perfil de professor gerenciar o conteúdo completo do blog sem precisar navegar por detalhes individuais.
+
+#### Acesso
+- Link **"Área administrativa"** no menu do cabeçalho (na barra de navegação à esquerda, ao lado do link "Posts")
+  - Nav com estilo `NavLinkStyled` (sublinha com fundo roxo claro quando a rota `/admin` está ativa)
+- Atalho direto via URL `/admin`
+
+#### Carregamento dos dados
+Ao abrir a tela, a aplicação carrega **TODOS os posts existentes** usando paginação em loop com `limit=50` por página até reunir o total:
+1. Inicializa `page=1` e executa `GET /posts?page=1&limit=50`
+2. Se a quantidade de itens recebidos for menor que o `total` retornado, incrementa `page += 1` e executa novamente o `GET`
+3. Concatena todos os resultados em um único array `posts` sem duplicatas
+4. Utiliza `apiAluno` (perfil leitura) para esse carregamento — a exclusão é a única operação que exige `apiProfessor`
+
+#### Layout da lista (por item)
+Cada post é exibido em uma **linha única** dentro de uma `<ul>` estilizada com bordas e separadores:
+| Elemento | Descrição |
+|---|---|
+| **Badge #ID** | `#{id}` em um container cinza arredondado no canto esquerdo |
+| **Título do post (clicável)** | Texto do título limitado por `text-overflow: ellipsis` (caso seja longo, mostra `title` no hover). Clicar abre o **detalhe** do post em `/posts/{id}` |
+| **Ações (lado direito)** | Dois botões lado-a-lado: `✏️ Editar` (secondary sm) e `🗑️ Remover` (secondary sm). No mobile: os botões empilham à direita abaixo do título |
+
+#### Botão "✏️ Editar" (na área administrativa)
+- Posicionamento: lado direito da linha
+- Comportamento: `<Link>` para `/posts/${id}/edit` (mesma tela de edição já existente com pré-carregamento)
+- Experiência idêntica ao botão Editar no PostDetail
+
+#### Botão "🗑️ Remover" (na área administrativa) — Exclusão em 2 passos
+A exclusão de um post é uma ação destrutiva e, por isso, exige **confirmação em dois passos** para evitar exclusões acidentais:
+
+| Passo | Ação do usuário | Resultado visual |
+|---|---|---|
+| **Passo 1 — Clicar "🗑️ Remover"** | Botão secundário normal | A linha do post muda para **estado destrutivo** (fundo vermelho claro em dark mode / efeito visual). Os botões Editar e Remover são **substituídos** por dois novos botões: `Cancelar` (secondary, volta ao estado normal) e `Confirmar Exclusão` (vermelho sólido, danger) |
+| **Passo 2 — Clicar "Confirmar Exclusão"** | Botão danger vermelho | Executa `DELETE /posts/${id}` com **token de professor** (`apiProfessor.delete`). Durante a requisição: o botão fica em estado `loading` com texto "Removendo...", os outros botões ficam `disabled`, e o `deletingId` bloqueia interações em outras linhas |
+
+**Resposta esperada do backend (DELETE)**: HTTP **204 No Content** (sem corpo).
+
+Após o **204**:
+1. O post é **removido imediatamente** da lista local via `setPosts(prev => prev.filter(p => p.id !== id))` — sem necessidade de refetch completo
+2. Um **banner de sucesso** verde aparece no topo da página: *✅ Post "X foi removido com sucesso."* (com botão × para o usuário dispensar a mensagem)
+3. O contador "N posts no total" atualiza automaticamente
+
+#### Estados tratados na exclusão (DELETE)
+
+| Estado HTTP | Gatilho | Apresentação |
+|---|---|---|
+| ✅ **204 No Content** | Sucesso | Item removido da lista local + banner de sucesso com nome do post |
+| ⚠️ **400 Bad Request** | Payload inválido (raro em DELETE) | Banner de erro com a mensagem exata do servidor |
+| ⚠️ **401 Unauthorized** | Token ausente ou inválido | Banner: *"Autenticação necessária. Verifique token de professor."* |
+| ⚠️ **403 Forbidden** | Token de aluno usado | Banner contextualizado: *"Exclusão de posts é exclusiva para o perfil de professor. Verifique o token em api.ts."* |
+| ⚠️ **404 Not Found** | Post já havia sido excluído | Aviso: item é removido da lista local + mensagem "Post não encontrado. Lista atualizada." |
+| ⚠️ **5xx Servidor** | Erro interno | Banner: *"Erro no servidor. Tente novamente mais tarde."* |
+
+#### Outros estados da página AdminArea
+| Estado | Apresentação |
+|---|---|
+| 🌀 **Carregando** | `<Loading>` com mensagem "Carregando posts para administração..." |
+| 📝 **Vazio (0 posts)** | `<EmptyState>` explicando que não existem posts + opção de criar o primeiro (botão Novo Post no topo da lista quando existir itens) |
+| ⚠️ **Erro ao carregar** | `<ErrorState>` completo com título, mensagem e botão "Tentar novamente" que refaz o `fetchAllPosts` |
+| ✅ **Topo da lista** | Cabeçalho simples: `ResultCount` contagem de posts + botão compacto "+ Novo Post" (acessa `/posts/create`) |
+
+#### Responsividade (mobile)
+Em telas com largura ≤ 768px (breakpoint tablet/mobile):
+- Cada linha da lista muda de `flex row` → `flex column`
+- O título ocupa 100% da largura
+- Os botões de ação alinham-se à **direita** abaixo do título, com largura ajustada automaticamente
+
 ### Fluxo de Autenticação
 
 A API backend exige autenticação via header:
@@ -503,12 +598,26 @@ Atualmente a aplicação usa **dois tokens separados** configurados em [api.ts](
 
 | Export no `api.ts` | Token hardcoded | Perfil | Permissões | Uso atual no código |
 |---|---|---|---|---|
-| `apiAluno` (default `api`) | `aluno-dev-token-change-me` | **Aluno** | Apenas **leitura**: GET `/posts`, `/posts/:id`, `/posts/search` | Listagem (`PostList`) e Detalhe (`PostDetail`) |
-| `apiProfessor` (export nomeado) | `professor-dev-token-change-me` | **Professor** | **Leitura + escrita**: GET + **POST** `/posts` + **PUT** `/posts/:id` + DELETE `/posts/:id` | Criação (`PostCreate`) + **Edição** (`PostEdit` para o `PUT /posts/:id` e também o `GET /posts/:id` de pré-carregamento) |
+| `apiAluno` (default `api`) | `aluno-dev-token-change-me` | **Aluno** | Apenas **leitura**: GET `/posts`, `/posts/:id`, `/posts/search`, paginação `/posts?page=X&limit=N` | Listagem (`PostList`), Detalhe (`PostDetail`) e **carregamento da lista na AdminArea** (`fetchAllPosts` paginado até obter todos) |
+| `apiProfessor` (export nomeado) | `professor-dev-token-change-me` | **Professor** | **Leitura + escrita completa**: GET + **POST** `/posts` + **PUT** `/posts/:id` + **DELETE** `/posts/:id` | Criação (`PostCreate`) + Edição (`PostEdit` para o `PUT /posts/:id` e também o `GET /posts/:id` de pré-carregamento) + **Exclusão** (`AdminArea` para o `DELETE /posts/:id`) |
 
-> ⚠️ **Aviso**: Tokens hardcoded são aceitáveis nesta fase de aprendizado. Para produção, implemente fluxo de login real (OAuth/JWT) e armazene tokens de forma segura (HttpOnly cookies ou localStorage com medidas anti-XSS). Em caso de **403 Forbidden** ao criar ou editar post, confira se o token de professor em [api.ts](src/api.ts#L4) corresponde ao `PROFESSOR_ACCESS_TOKEN` do backend `.env`.
+> ⚠️ **Aviso**: Tokens hardcoded são aceitáveis nesta fase de aprendizado. Para produção, implemente fluxo de login real (OAuth/JWT) e armazene tokens de forma segura (HttpOnly cookies ou localStorage com medidas anti-XSS). Em caso de **403 Forbidden** ao **criar, editar ou excluir** post, confira se o token de professor em [api.ts](src/api.ts#L4) corresponde ao `PROFESSOR_ACCESS_TOKEN` do backend `.env`.
 
 ---
 
-## 🔮 Estou utilizando IA para a geração da documentação.
+## �️ Próximos Passos
+
+Funcionalidades e melhorias planejadas para as próximas etapas:
+
+1. 🔐 **Autenticação real (login/logout)**: Substituir tokens hardcoded por um fluxo completo de autenticação (OAuth2/JWT) com tela de login, armazenamento seguro de credenciais e refresh token
+2. 🔄 **Feedback visual com toasts**: Implementar toasts/notificações para ações bem-sucedidas como "Post criado!", "Alterações salvas!" e "Post excluído com sucesso!" usando `state: { justCreated, justUpdated }` já preparados no navigate e o `successMessage` da AdminArea
+3. 🧪 **Testes automatizados**: Cobertura com testes unitários (Vitest) para componentes de UI e testes de integração para os fluxos de listar, detalhar, criar, editar e excluir posts
+4. 🎨 **Páginas de perfil e autor**: Exibir informações do autor do post e página dedicada com todos os posts de um mesmo autor
+5. 🏷️ **Categorias e tags**: Adicionar sistema de categorização/tags aos posts com filtro na listagem e também na área administrativa
+6. ♿ **Acessibilidade (WCAG)**: Revisão completa de ARIA labels, navegação por teclado e contraste para atender aos padrões de acessibilidade
+7. 🧰 **Ações em lote na área administrativa**: Checkboxes por item + ações em lote (excluir múltiplos posts, filtrar/ordenar lista por data/título)
+
+---
+
+## �� Estou utilizando IA para a geração da documentação.
 

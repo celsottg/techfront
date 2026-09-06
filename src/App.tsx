@@ -6,6 +6,7 @@ import PostList from './pages/PostList/PostList';
 import PostDetail from './pages/PostDetail/PostDetail';
 import PostCreate from './pages/PostCreate/PostCreate';
 import PostEdit from './pages/PostEdit/PostEdit';
+import AdminArea from './pages/AdminArea/AdminArea';
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
       <MainContent>
         <Routes>
           <Route path="/" element={<PostList />} />
+          <Route path="/admin" element={<AdminArea />} />
           <Route path="/posts/create" element={<PostCreate />} />
           <Route path="/posts/:id/edit" element={<PostEdit />} />
           <Route path="/posts/:id" element={<PostDetail />} />

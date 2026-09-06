@@ -106,6 +106,7 @@ const MobilePlusIcon = styled.span`
 function Header() {
   const location = useLocation();
   const isHome = location.pathname === '/';
+  const isAdmin = location.pathname === '/admin';
 
   return (
     <HeaderContainer>
@@ -115,6 +116,9 @@ function Header() {
           <Nav>
             <NavLinkStyled to="/" $active={isHome}>
               Posts
+            </NavLinkStyled>
+            <NavLinkStyled to="/admin" $active={isAdmin}>
+              Área administrativa
             </NavLinkStyled>
           </Nav>
         </LeftSection>
