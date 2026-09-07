@@ -55,17 +55,6 @@ const Title = styled.h1`
   }
 `;
 
-const Subtitle = styled.p`
-  font-size: ${({ theme }) => theme.typography.fontSize.base};
-  color: ${({ theme }) => theme.colors.secondary};
-  line-height: 1.5;
-  margin: 0;
-
-  @media (prefers-color-scheme: dark) {
-    color: ${({ theme }) => theme.colors.dark.text};
-  }
-`;
-
 const Form = styled.form`
   display: flex;
   flex-direction: column;
