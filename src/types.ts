@@ -33,3 +33,34 @@ export interface PostState {
     total: number;
   };
 }
+
+export type Role = 'PROFESSOR' | 'ALUNO';
+
+export interface AuthUser {
+  id: number;
+  nome: string;
+  email: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  senha: string;
+}
+
+export interface LoginResponse {
+  token: string;
+  role: Role;
+  usuario: AuthUser;
+}
+
+export interface LoginValidationError {
+  message?: string;
+  errors?: Partial<Record<keyof LoginRequest, string[]>>;
+}
+
+export interface AuthState {
+  token: string | null;
+  role: Role | null;
+  usuario: AuthUser | null;
+  isAuthenticated: boolean;
+}
